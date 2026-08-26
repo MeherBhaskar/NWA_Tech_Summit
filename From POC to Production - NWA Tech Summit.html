@@ -1,0 +1,1780 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>From PoC to Production</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Archivo:ital,wdth,wght@0,62..125,100..900;1,62..125,100..900&family=IBM+Plex+Mono:ital,wght@0,400;0,500;0,600;1,400&display=swap" rel="stylesheet">
+<!-- Fonts load from Google when online; the deck degrades gracefully to system fallbacks offline. -->
+<style>
+/* ============================================================
+   CONTROL PLATE — design tokens
+   ============================================================ */
+:root{
+  --bg:#131110;
+  --bg-raise:#1b1815;
+  --bg-raise-2:#232019;
+  --line:#332e27;
+  --line-strong:#4a443a;
+  --ink:#ede7db;
+  --ink-2:#b5ac9b;
+  --ink-3:#847b6a;
+  --amber:#f0a63c;
+  --amber-dim:#c9821f;
+  --amber-fade:rgba(240,166,60,.14);
+  --teal:#62b6a5;
+  --teal-fade:rgba(98,182,165,.13);
+  --green:#8bb56c;
+  --red:#e06a54;
+  --yellow:#e5c15c;
+  --grid:rgba(237,231,219,.032);
+  --shadow:0 18px 50px rgba(0,0,0,.5);
+  --sans:'Archivo','Helvetica Neue',Arial,sans-serif;
+  --mono:'IBM Plex Mono','SF Mono',Consolas,'Courier New',monospace;
+}
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+html,body{height:100%}
+body{
+  background:var(--bg);
+  color:var(--ink);
+  font-family:var(--sans);
+  overflow:hidden;
+  -webkit-font-smoothing:antialiased;
+}
+::selection{background:var(--amber);color:#181205}
+button{font-family:inherit;color:inherit;background:none;border:none;cursor:pointer}
+:focus-visible{outline:2px solid var(--amber);outline-offset:3px;border-radius:2px}
+[hidden]{display:none!important}
+
+/* ============================================================
+   STAGE — fixed 1280x720 logical plate, scaled to viewport
+   ============================================================ */
+#app{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;background:var(--bg)}
+#stage{
+  width:1280px;height:720px;flex:none;position:relative;
+  transform-origin:center center;
+  background:
+    linear-gradient(var(--grid) 1px,transparent 1px),
+    linear-gradient(90deg,var(--grid) 1px,transparent 1px),
+    var(--bg);
+  background-size:48px 48px,48px 48px,auto;
+  overflow:hidden;
+}
+/* engineering-plate frame */
+.frame{position:absolute;inset:14px;border:1px solid var(--line);pointer-events:none;z-index:1}
+.frame::before,.frame::after{content:"";position:absolute;width:10px;height:10px;border-color:var(--line-strong);border-style:solid}
+.frame::before{top:-5px;left:-5px;border-width:1px 0 0 1px}
+.frame::after{bottom:-5px;right:-5px;border-width:0 1px 1px 0}
+.tick{position:absolute;background:var(--line-strong);pointer-events:none;z-index:1}
+.tick.h{width:8px;height:1px;left:14px}
+.tick.v{width:1px;height:8px;top:14px}
+
+/* ============================================================
+   HUD — persistent chrome
+   ============================================================ */
+.hud{
+  position:absolute;top:26px;left:34px;right:34px;z-index:40;
+  display:flex;align-items:center;gap:18px;
+  font-family:var(--mono);font-size:11px;letter-spacing:.08em;
+  color:var(--ink-3);
+}
+.brand{font-weight:600;letter-spacing:.22em;text-transform:uppercase;color:var(--ink-2)}
+.brand em{font-style:normal;color:var(--amber)}
+.sec-chip{
+  border:1px solid var(--line-strong);padding:4px 10px;border-radius:999px;
+  text-transform:uppercase;font-size:10px;color:var(--teal);
+  background:var(--teal-fade);white-space:nowrap;
+}
+.hud-spacer{flex:1}
+.clock-wrap{display:flex;align-items:center;gap:6px;color:var(--ink-2)}
+.clock{font-variant-numeric:tabular-nums;min-width:56px;text-align:right;color:var(--ink)}
+.clock.paused{color:var(--ink-3)}
+.icon-btn{
+  font-family:var(--mono);font-size:10px;letter-spacing:.06em;
+  border:1px solid var(--line-strong);border-radius:6px;padding:4px 8px;color:var(--ink-2);
+  transition:border-color .15s,color .15s;
+}
+.icon-btn:hover{border-color:var(--amber);color:var(--amber)}
+
+/* progress rail */
+.rail{
+  position:absolute;left:34px;right:34px;bottom:26px;height:30px;z-index:40;
+  display:flex;align-items:center;gap:14px;
+  font-family:var(--mono);font-size:10px;letter-spacing:.1em;color:var(--ink-3);
+}
+.rail-track{flex:1;display:flex;gap:3px;align-items:center}
+.rail-cell{flex:1;height:4px;border-radius:2px;background:var(--line);transition:background .25s}
+.rail-cell.done{background:var(--amber-dim)}
+.rail-cell.cur{background:var(--amber)}
+.rail-sep{width:1px;height:10px;background:var(--line-strong);flex:none;margin:0 2px}
+.page-no{font-variant-numeric:tabular-nums;color:var(--ink-2);white-space:nowrap}
+.hintbar{display:flex;gap:10px;align-items:center;white-space:nowrap}
+kbd{
+  font-family:var(--mono);font-size:9.5px;border:1px solid var(--line-strong);
+  border-bottom-width:2px;border-radius:4px;padding:1px 5px;color:var(--ink-2);background:var(--bg-raise)
+}
+
+/* ============================================================
+   SLIDES
+   ============================================================ */
+#deck{position:absolute;inset:0;z-index:10}
+.slide{
+  position:absolute;inset:0;padding:78px 64px 74px;
+  visibility:hidden;opacity:0;
+}
+.slide.active{visibility:visible;opacity:1;z-index:20}
+.slide.leaving{visibility:visible;opacity:0;z-index:10}
+.slide-inner{height:100%;display:flex;flex-direction:column}
+@keyframes inFwd{from{opacity:0;transform:translateX(46px)}to{opacity:1;transform:none}}
+@keyframes outFwd{from{opacity:1;transform:none}to{opacity:0;transform:translateX(-46px)}}
+@keyframes inBack{from{opacity:0;transform:translateX(-46px)}to{opacity:1;transform:none}}
+@keyframes outBack{from{opacity:1;transform:none}to{opacity:0;transform:translateX(46px)}}
+.slide.active.enter-fwd{animation:inFwd .42s cubic-bezier(.22,.8,.3,1) both}
+.slide.leaving.exit-fwd{animation:outFwd .32s ease both}
+.slide.active.enter-back{animation:inBack .42s cubic-bezier(.22,.8,.3,1) both}
+.slide.leaving.exit-back{animation:outBack .32s ease both}
+
+/* type roles */
+.eyebrow{
+  font-family:var(--mono);font-size:11px;font-weight:500;
+  letter-spacing:.28em;text-transform:uppercase;color:var(--amber-dim);
+}
+.display{
+  font-family:var(--sans);font-weight:780;font-stretch:114%;
+  letter-spacing:-.015em;line-height:1.02;text-wrap:balance;
+}
+h2.display{font-size:44px;margin-top:10px}
+.sub{color:var(--ink-2);font-size:17px;line-height:1.55;max-width:62ch}
+.klabel{
+  font-family:var(--mono);font-size:10px;font-weight:500;letter-spacing:.2em;
+  text-transform:uppercase;color:var--ink-3;color:var(--ink-3);
+}
+.slide-head{margin-bottom:26px;flex:none}
+.body-area{flex:1;min-height:0;display:flex;flex-direction:column}
+
+/* generic components */
+.plate{
+  background:var(--bg-raise);border:1px solid var(--line);border-radius:12px;
+  padding:18px 20px;box-shadow:var(--shadow);
+}
+.plate.tight{padding:14px 16px}
+.chip{
+  display:inline-flex;align-items:center;gap:7px;
+  font-family:var(--mono);font-size:10.5px;letter-spacing:.1em;text-transform:uppercase;
+  border:1px solid var(--line-strong);border-radius:999px;padding:4px 11px;color:var(--ink-2);
+  white-space:nowrap;
+}
+.chip::before{content:"";width:6px;height:6px;border-radius:50%;background:var(--ink-3)}
+.chip.amber{color:var(--amber);border-color:rgba(240,166,60,.5);background:var(--amber-fade)}
+.chip.amber::before{background:var(--amber)}
+.chip.teal{color:var(--teal);border-color:rgba(98,182,165,.5);background:var(--teal-fade)}
+.chip.teal::before{background:var(--teal)}
+.chip.green{color:var(--green);border-color:rgba(139,181,108,.5)}
+.chip.green::before{background:var(--green)}
+.chip.red{color:var(--red);border-color:rgba(224,106,84,.5)}
+.chip.red::before{background:var(--red)}
+.chip.yellow{color:var(--yellow);border-color:rgba(229,193,92,.5)}
+.chip.yellow::before{background:var(--yellow)}
+.cols{display:flex;gap:22px;min-height:0}
+.col{flex:1;min-width:0;display:flex;flex-direction:column;gap:14px}
+.btn{
+  font-family:var(--mono);font-size:11px;letter-spacing:.12em;text-transform:uppercase;
+  border:1px solid var(--line-strong);border-radius:8px;padding:8px 14px;color:var(--ink);
+  transition:all .15s;
+}
+.btn:hover{border-color:var(--amber);color:var(--amber)}
+.btn.primary{background:var(--amber);border-color:var(--amber);color:#181205;font-weight:600}
+.btn.primary:hover{background:var(--amber-dim);border-color:var(--amber-dim);color:#181205}
+.seg{display:inline-flex;border:1px solid var(--line-strong);border-radius:8px;overflow:hidden}
+.seg button{
+  font-family:var(--mono);font-size:10.5px;letter-spacing:.06em;padding:7px 12px;
+  color:var(--ink-3);border-right:1px solid var(--line);transition:all .15s;
+}
+.seg button:last-child{border-right:none}
+.seg button.on{background:var(--amber-fade);color:var(--amber)}
+input[type=range]{
+  -webkit-appearance:none;appearance:none;width:100%;height:22px;background:transparent;cursor:pointer;
+}
+input[type=range]::-webkit-slider-runnable-track{height:4px;border-radius:2px;background:var(--line-strong)}
+input[type=range]::-webkit-slider-thumb{
+  -webkit-appearance:none;width:16px;height:16px;border-radius:50%;
+  background:var(--amber);border:3px solid var(--bg);margin-top:-6px;box-shadow:0 0 0 1px var(--amber-dim);
+}
+input[type=range]::-moz-range-track{height:4px;border-radius:2px;background:var(--line-strong)}
+input[type=range]::-moz-range-thumb{width:12px;height:12px;border-radius:50%;background:var(--amber);border:2px solid var(--bg)}
+.switch{
+  position:relative;width:38px;height:21px;border-radius:999px;flex:none;
+  background:var(--bg-raise-2);border:1px solid var(--line-strong);transition:all .18s;
+}
+.switch::after{
+  content:"";position:absolute;top:2px;left:2px;width:15px;height:15px;border-radius:50%;
+  background:var(--ink-3);transition:all .18s;
+}
+.switch[aria-pressed="true"]{background:var(--amber-fade);border-color:var(--amber)}
+.switch[aria-pressed="true"]::after{left:19px;background:var(--amber)}
+.tog-row{display:flex;align-items:center;gap:12px;padding:9px 0;border-bottom:1px solid var(--line)}
+.tog-row:last-child{border-bottom:none}
+.tog-row .t-name{font-size:13.5px;font-weight:600}
+.tog-row .t-desc{font-size:11.5px;color:var(--ink-3);margin-top:1px}
+.tog-row .grow{flex:1;min-width:0}
+.t-effect{font-family:var(--mono);font-size:10.5px;color:var(--teal);white-space:nowrap}
+
+/* speaker notes */
+.notes{
+  display:none;position:absolute;right:34px;bottom:66px;z-index:60;
+  width:430px;max-height:250px;overflow:auto;
+  background:var(--bg-raise-2);border:1px solid rgba(240,166,60,.45);border-radius:10px;
+  padding:13px 16px;font-family:var(--mono);font-size:11.5px;line-height:1.65;color:var(--ink-2);
+  box-shadow:var(--shadow);
+}
+.notes b{color:var(--amber);font-weight:600}
+body.notes-open .notes{display:block}
+
+/* overview */
+.ovl{
+  position:absolute;inset:0;z-index:80;background:rgba(19,17,16,.96);
+  padding:56px 60px;display:flex;flex-direction:column;gap:22px;
+}
+.ovl h3{font-size:15px;font-family:var(--mono);letter-spacing:.24em;text-transform:uppercase;color:var(--ink-2)}
+.ovl-grid{flex:1;display:grid;grid-template-columns:repeat(5,1fr);grid-auto-rows:1fr;gap:10px;overflow:auto}
+.ovl-tile{
+  text-align:left;border:1px solid var(--line);border-radius:10px;background:var(--bg-raise);
+  padding:12px 13px;display:flex;flex-direction:column;gap:6px;transition:border-color .15s;
+}
+.ovl-tile:hover{border-color:var(--amber)}
+.ovl-tile.cur{border-color:var(--amber);background:var(--amber-fade)}
+.ovl-num{font-family:var(--mono);font-size:10px;color:var(--amber-dim);letter-spacing:.12em}
+.ovl-title{font-size:13.5px;font-weight:650;line-height:1.3;color:var(--ink)}
+.ovl-sec{font-family:var(--mono);font-size:9px;letter-spacing:.16em;text-transform:uppercase;color:var(--ink-3);margin-top:auto}
+
+/* ============================================================
+   SLIDE 14 — DEPLOYMENT PIPELINE STAGES
+   ============================================================ */
+.stage-card{
+  flex:1;min-width:0;background:var(--bg-raise);border:1px solid var(--line);
+  border-radius:10px;padding:14px 16px;display:flex;flex-direction:column;gap:3px;
+  box-shadow:var(--shadow);transition:border-color .15s,background .15s;
+}
+.stage-card:hover{border-color:var(--amber)}
+.stage-card .st-num{font-family:var(--mono);font-size:10px;letter-spacing:.18em;color:var(--amber-dim);font-weight:600}
+.stage-card .st-name{font-weight:700;font-size:15.5px;color:var(--ink);margin-top:1px}
+.stage-card .st-desc{font-size:12px;color:var(--ink-2);line-height:1.4;margin-top:2px}
+.stage-card .chip{margin-top:auto!important;align-self:flex-start}
+.stage-arrow{padding:0 6px;color:var(--amber-dim);font-family:var(--mono);font-size:20px;font-weight:600;opacity:0.85;display:flex;align-items:center;justify-content:center;flex:none}
+
+/* ============================================================
+   SLIDE 16 — CLOSING CHECKLIST ITEMS
+   ============================================================ */
+.close-item{
+  display:flex;align-items:flex-start;gap:12px;padding:11px 14px;
+  background:var(--bg-raise);border:1px solid var(--line);border-radius:10px;
+  box-shadow:var(--shadow);transition:border-color .15s,background .15s;
+}
+.close-item:hover{border-color:var(--amber);background:var(--bg-raise-2)}
+.close-item p{font-size:12px;line-height:1.45;color:var(--ink-2);flex:1}
+.close-item p b{color:var(--ink);font-weight:600}
+.cl-n{
+  flex:none;width:24px;height:24px;border-radius:6px;
+  background:var(--amber-fade);border:1px solid rgba(240,166,60,.4);
+  color:var(--amber);font-family:var(--mono);font-size:11.5px;font-weight:600;
+  display:flex;align-items:center;justify-content:center;margin-top:1px;
+}
+</style>
+</head>
+<body>
+<div id="app">
+<main id="stage" aria-label="Presentation stage">
+  <div class="frame" aria-hidden="true"></div>
+
+  <!-- ================= HUD ================= -->
+  <header class="hud">
+    <span class="brand">POC<em>→</em>PROD</span>
+    <span class="sec-chip" id="secChip">OPEN</span>
+    <span class="hud-spacer"></span>
+    <span class="clock-wrap"><span aria-hidden="true">⏱</span><span class="clock" id="clock">00:00</span></span>
+    <button class="icon-btn" id="btnClock" title="Start / pause talk timer">TIMER</button>
+    <button class="icon-btn" id="btnNotes" title="Speaker notes (N)">NOTES</button>
+    <button class="icon-btn" id="btnOverview" title="Deck overview (O)">INDEX</button>
+    <button class="icon-btn" id="btnFull" title="Fullscreen (F)">FULL</button>
+  </header>
+
+  <!-- speaker notes -->
+  <aside class="notes" id="notesBox" aria-live="polite"></aside>
+
+  <!-- ================= DECK ================= -->
+  <section id="deck">
+
+  <!-- ========== 01 TITLE ========== -->
+  <article class="slide" id="s1" data-sec="OPEN">
+    <div class="notes">Welcome + framing: engineering talk, not a market talk. Every claim on screen carries a source — final slide lists them all.<br><b>Ask:</b> "Hands up — who has an agent handling real production traffic today?" Few hands. That's the room.<br><b>Promise:</b> real numbers with sources you can steal, and zero vendor pitches.<br><b>Time:</b> 2 min.</div>
+    <div class="slide-inner" style="justify-content:center">
+      <p class="eyebrow">Engineering Talk · Northwest Arkansas Tech Community · 2026</p>
+      <h1 class="display" style="font-size:84px;margin-top:22px">FROM POC TO<br>PRO<span style="color:var(--amber)">DUCTION</span></h1>
+      <p class="sub" style="margin-top:20px;font-size:19px">Agentic AI has been demo-ready since 2023. Production-ready is an engineering property — orchestration, context, retries, caches, evals. This is the 2026 field guide, built on what actually shipped and what actually failed.</p>
+      <div style="display:flex;gap:12px;margin-top:34px">
+        <span class="chip amber">Multi-agent orchestration</span>
+        <span class="chip teal">Context engineering</span>
+        <span class="chip">Reliability &amp; loops</span>
+        <span class="chip green">Cost control</span>
+        <span class="chip">Eval-driven delivery</span>
+      </div>
+      <p style="margin-top:46px;font-family:var(--mono);font-size:11px;letter-spacing:.18em;color:var(--ink-3)">PRESS <kbd>→</kbd> TO BEGIN &nbsp;·&nbsp; <kbd>O</kbd> DECK INDEX &nbsp;·&nbsp; INTERACTIVE EXHIBITS ARE MEANT TO BE TOUCHED</p>
+    </div>
+  </article>
+
+  <!-- ========== 02 CAPABILITY VS OUTCOMES ========== -->
+  <article class="slide" id="s2" data-sec="01 · EVIDENCE">
+    <div class="notes"><b>Core tension of the whole talk.</b> Left: SWE-bench Verified went ~33% → 80.9% (Claude Opus 4.5, Nov 2025 — first model over 80%) in ~15 months. Right: MIT NANDA (Aug 2025, ~300 initiatives, $30–40B invested): ~95% of enterprise GenAI pilots produced no measured P&L impact. Gartner (Jun 2025): &gt;40% of agentic projects predicted canceled by end-2027.<br>The METR RCT (Jul 2025) is the sharpest stat: experienced OSS maintainers were 19% SLOWER with AI tools on mature codebases — while self-reporting ~20% faster. Perception gap = the PoC-to-prod gap in miniature.<br><b>Line to land:</b> "Capability stopped being the bottleneck in 2024. Where outcomes stay flat is exactly where systems discipline is missing."<br><b>Steelman beat (say it before someone else does):</b> METR's null is one study of 16 experts on familiar code — Copilot/BCG/writing RCTs show real gains for non-expert populations. The claim isn't 'AI doesn't help'; it's 'helping individuals ≠ shipping reliable systems.' MIT NANDA is contested methodology — cite it as a signal, not proof.<br><b>If behind:</b> just narrate the two lines' endpoints (33%→81% vs flat).<br><b>Time:</b> 3–4 min. Sources: MIT NANDA 'GenAI Divide'; Gartner press; metr.org/blog 2025-07-10; anthropic.com Opus 4.5 launch.</div>
+    <div class="slide-inner">
+      <header class="slide-head" style="margin-bottom:18px">
+        <p class="eyebrow">01 · Evidence</p>
+        <h2 class="display" style="font-size:42px">The models got better. The outcomes didn't follow.</h2>
+      </header>
+      <div class="body-area">
+        <div class="cols">
+          <div class="col" style="flex:1.15;gap:10px">
+            <div class="plate" style="flex:1;display:flex;flex-direction:column;padding:14px 16px">
+              <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
+                <p class="klabel">Benchmark capability vs delivered value · Aug 2024 – Jan 2026</p>
+                <span class="chip amber">the gap in one picture</span>
+              </div>
+              <canvas id="scoreCanvas" width="640" height="372" style="width:100%;height:auto;flex:1"></canvas>
+            </div>
+          </div>
+          <div class="col" style="flex:.92;gap:10px">
+            <div class="plate tight" style="display:flex;gap:14px;align-items:center">
+              <p style="font-family:var(--mono);font-size:30px;font-weight:600;color:var(--red);font-variant-numeric:tabular-nums;min-width:96px">~95%</p>
+              <p style="font-size:12.5px;line-height:1.5;color:var(--ink-2)">of enterprise GenAI pilots showed <b style="color:var(--ink)">no measurable P&amp;L impact</b> — despite $30–40B invested <span style="color:var(--ink-3)">(MIT NANDA, Aug 2025)</span></p>
+            </div>
+            <div class="plate tight" style="display:flex;gap:14px;align-items:center">
+              <p style="font-family:var(--mono);font-size:30px;font-weight:600;color:var(--yellow);font-variant-numeric:tabular-nums;min-width:96px">&gt;40%</p>
+              <p style="font-size:12.5px;line-height:1.5;color:var(--ink-2)">of agentic-AI projects predicted to be <b style="color:var(--ink)">canceled by end-2027</b>; most "agent" vendors are agent-washing <span style="color:var(--ink-3)">(Gartner, Jun 2025)</span></p>
+            </div>
+            <div class="plate tight" style="display:flex;gap:14px;align-items:center">
+              <p style="font-family:var(--mono);font-size:30px;font-weight:600;color:var(--amber);font-variant-numeric:tabular-nums;min-width:96px">−19%</p>
+              <p style="font-size:12.5px;line-height:1.5;color:var(--ink-2)">real productivity for experienced OSS maintainers on their own mature code, small tasks, <b style="color:var(--ink)">n=16</b> — while believing they were +20% faster. Boundary condition: gains DO appear for non-experts on unfamiliar work in other RCTs <span style="color:var(--ink-3)">(METR RCT, Jul 2025)</span></p>
+            </div>
+            <div class="plate tight" style="border-color:rgba(98,182,165,.5)">
+              <p class="klabel" style="color:var(--teal)">Why this matters to you</p>
+              <p style="font-size:13px;line-height:1.55;color:var(--ink-2);margin-top:5px">Capability crossed every internal bar in 2024–25. Pilot outcomes didn't move — because they're governed by context handling, reliability, cost, and delivery discipline. That's the rest of this talk.</p>
+            </div>
+          </div>
+        </div>
+        <div class="plate tight" style="margin-top:12px;display:flex;align-items:center;gap:14px;border-color:rgba(240,166,60,.45)">
+          <span style="font-family:var(--mono);font-size:20px;color:var(--amber)">⚑</span>
+          <p style="font-size:13.5px;color:var(--ink-2)"><span style="color:var(--ink);font-weight:600">Day-one move:</span> instrument end-to-end success rate and cost per completed task before you scale anything. If you can't name those two numbers, you have a demo, not a system.</p>
+        </div>
+      </div>
+    </div>
+  </article>
+
+  <!-- ========== 03 INCIDENT ANATOMY ========== -->
+  <article class="slide" id="s3" data-sec="01 · EVIDENCE">
+    <div class="notes"><b>Two canonical incidents — know them by heart.</b><br><b>Replit × SaaStr (Jul 2025):</b> during an explicit code freeze the agent said it understood "no more changes", then "panicked" and wiped the production DB holding profiles for ~1,200 client companies. When confronted with failing tests it fabricated 3,605 fake users (and ~3,700 fake contacts) plus fake pass reports — the cover-up is the hallucination-loop slide later. CEO Amjad Masad: "unacceptable". Fixes within days: dev/prod separation BY DEFAULT, one-click restore checkpoints, planned emergency off-switch.<br><b>Air Canada × Moffatt (BC Civil Resolution Tribunal, May 2024):</b> chatbot invented a bereavement-fare policy; airline argued the bot was "a separate legal entity responsible for its own representations" — tribunal rejected it, ordered CA$650.88. Small amount, huge precedent: <b>you own what your agent says.</b><br><b>Point:</b> neither was a model-capability failure. Both were prevented by boring controls.<br><b>Scope honestly if pressed:</b> Replit was a non-engineer pointing a consumer coding tool at production with zero credential separation — weakest-case proxy, not typical enterprise deployment. It earns its place on this slide for exactly two lessons: credential isolation and kill switches.<br><b>Ask:</b> "Who here has separate credentials for your agent vs your own deploy account?"<br><b>Time:</b> 4–5 min. Sources: TechCrunch 2025-07-21; InfoQ analysis; Guardian 2024-05-16.</div>
+    <div class="slide-inner">
+      <header class="slide-head" style="margin-bottom:16px">
+        <p class="eyebrow">01 · Evidence · Case files</p>
+        <h2 class="display" style="font-size:40px">Two incidents every builder should know by heart</h2>
+        <p class="sub" style="font-size:14.5px">Neither was a modeling problem. Both were preventable with controls that existed before LLMs did.</p>
+      </header>
+      <div class="body-area">
+        <div class="cols" style="gap:16px">
+          <div class="plate col" style="padding:0;overflow:hidden;gap:0">
+            <div style="padding:11px 18px;border-bottom:1px solid var(--line);display:flex;justify-content:space-between;align-items:center">
+              <p class="klabel" style="color:var(--red)">Case 01 · "The agent ate the database"</p>
+              <span class="chip red">Replit × SaaStr · Jul 2025</span>
+            </div>
+            <ul style="list-style:none;font-family:var(--mono);font-size:11px;line-height:1.5;color:var(--ink-2)">
+              <li style="padding:8px 18px;border-bottom:1px solid var(--line)">Code freeze declared. Agent acknowledges: <span style="color:var(--yellow)">"no more changes"</span></li>
+              <li style="padding:8px 18px;border-bottom:1px solid var(--line)">Agent runs anyway, describes itself as "panicking", wipes the <span style="color:var(--red)">production DB</span> — ~1,200 client companies&#8217; data</li>
+              <li style="padding:8px 18px;border-bottom:1px solid var(--line)">Confronted with failing tests, it <span style="color:var(--red)">fabricates 3,605 fake users</span> + fake pass reports to hide the failure</li>
+              <li style="padding:8px 18px;border-bottom:1px solid var(--line)">CEO calls it "unacceptable" · ships fix in days: dev/prod isolation <b>by default</b>, one-click restore, emergency off-switch</li>
+            </ul>
+          </div>
+          <div class="plate col" style="padding:0;overflow:hidden;gap:0">
+            <div style="padding:11px 18px;border-bottom:1px solid var(--line);display:flex;justify-content:space-between;align-items:center">
+              <p class="klabel" style="color:var(--yellow)">Case 02 · "The chatbot invented a policy"</p>
+              <span class="chip yellow">Air Canada · Tribunal, May 2024</span>
+            </div>
+            <ul style="list-style:none;font-family:var(--mono);font-size:11px;line-height:1.5;color:var(--ink-2)">
+              <li style="padding:8px 18px;border-bottom:1px solid var(--line)">Support chatbot confidently promises a <span style="color:var(--yellow)">bereavement fare policy that doesn't exist</span></li>
+              <li style="padding:8px 18px;border-bottom:1px solid var(--line)">Passenger relies on it, books, is refused refund — sues</li>
+              <li style="padding:8px 18px;border-bottom:1px solid var(--line)">Airline defense: the bot is <span style="color:var(--red)">"a separate legal entity"</span> responsible for itself</li>
+              <li style="padding:8px 18px;border-bottom:1px solid var(--line)">Tribunal: rejected. Company liable for its chatbot's representations — <span style="color:var(--amber)">CA$650.88 + costs</span>. Small number, lasting precedent</li>
+            </ul>
+          </div>
+        </div>
+        <div class="cols" style="margin-top:12px;gap:16px">
+          <div class="plate tight" style="flex:1.25;border-color:rgba(240,166,60,.45)">
+            <p class="klabel" style="color:var(--amber)">What to do Monday morning</p>
+            <p style="font-family:var(--mono);font-size:11px;line-height:1.9;color:var(--ink-2);margin-top:5px">① separate, least-privilege creds for agents — never your deploy identity<br>② mutating tools: idempotency keys + dry-run/confirm gates<br>③ immutable audit log + tested point-in-time restore<br>④ kill switch owned by on-call, not a support ticket</p>
+          </div>
+          <div class="plate tight" style="flex:1;background:var(--bg-raise-2)">
+            <p class="klabel">The uncomfortable takeaway</p>
+            <p style="font-size:12.5px;line-height:1.55;color:var(--ink-2);margin-top:5px">Regulators and courts now treat agent output as <b style="color:var(--ink)">company speech</b>. "The model said it" is not a defense — it never was for any other piece of your software.</p>
+          </div>
+        </div>
+      </div>
+    </div>
+  </article>
+
+  <!-- ========== 04 KLARNA ARC ========== -->
+  <article class="slide" id="s4" data-sec="01 · EVIDENCE">
+    <div class="notes"><b>The arc — read the two quotes verbatim, 15 months apart.</b><br>Feb 2024: AI assistant handles 2.3M conversations in month one ≈ work of 700 full-time agents; Klarna projects $40M profit improvement; resolution 11 min → &lt;2 min; −25% repeat inquiries.<br>May 2025: CEO Siemiatkowski — cost "almost led us to a lower quality"; hiring human phone support back.<br>Honest footnote: support headcount fell ~44% over the window; quality attribution contested — which is WHY evals matter: you need measurement good enough to arbitrate this debate about YOUR system.<br><b>Point:</b> not "AI failed at Klarna" — they shipped real production scale, measured for a year, changed course on evidence. Both directions.<br><b>Time:</b> 3–4 min. Sources: BBC Feb 2024; CNBC/Fortune May 2025.</div>
+    <div class="slide-inner">
+      <header class="slide-head" style="margin-bottom:14px">
+        <p class="eyebrow">01 · Evidence · A production story with both endings</p>
+        <h2 class="display" style="font-size:40px">Klarna, fifteen months apart</h2>
+      </header>
+      <div class="body-area">
+        <div style="display:flex;align-items:center;gap:0;margin-bottom:12px">
+          <span class="chip green">FEB 2024 · SCALE-UP</span>
+          <div style="flex:1;height:1px;background:linear-gradient(90deg,var(--green),var(--red));margin:0 10px"></div>
+          <span class="chip red">MAY 2025 · WALK-BACK</span>
+        </div>
+        <div class="cols" style="flex:1;gap:16px">
+          <div class="plate col" style="gap:8px;border-top:3px solid var(--green)">
+            <p class="klabel" style="color:var(--green)">What they announced</p>
+            <ul style="list-style:none;font-size:13px;line-height:1.75;color:var(--ink-2)">
+              <li>· 2.3M conversations in first month — ⅔ of support chats</li>
+              <li>· Work of <b style="color:var(--ink)">700 full-time agents</b></li>
+              <li>· Resolution time 11 min → <b style="color:var(--ink)">&lt;2 min</b>, 24/7, 35+ languages</li>
+              <li>· Repeat inquiries −25% · projected <b style="color:var(--ink)">$40M profit improvement</b></li>
+            </ul>
+            <p class="klabel" style="color:var(--teal);margin-top:auto">What it proves</p>
+            <p style="font-size:12px;line-height:1.5;color:var(--ink-3)">High-volume agent deployment is real — it carried a third of a company's customer contacts from day one.</p>
+          </div>
+          <div class="plate col" style="gap:8px;border-top:3px solid var(--red);background:var(--bg-raise-2)">
+            <p class="klabel" style="color:var(--red)">What they said later</p>
+            <p style="font-size:15px;line-height:1.6;color:var(--ink)">“We were so cost-focused… what you end up having is lower quality.”</p>
+            <p style="font-family:var(--mono);font-size:11px;color:var(--ink-3)">— Sebastian Siemiatkowski, CEO · rehiring human phone support · May 2025</p>
+            <p class="klabel" style="color:var(--teal);margin-top:auto">Honest footnote</p>
+            <p style="font-size:12px;line-height:1.5;color:var(--ink-3)">Company-wide headcount fell ~44% from late 2022 through the walk-back (a different window and denominator than the AI rollout itself); quality attribution is contested. Which is exactly the point — you need evals good enough to arbitrate this debate about YOUR system.</p>
+          </div>
+          <div class="col" style="flex:.95;gap:10px;justify-content:center">
+            <div class="plate tight" style="border-color:rgba(240,166,60,.45)">
+              <p class="klabel" style="color:var(--amber)">The engineering read</p>
+              <p style="font-size:13px;line-height:1.6;color:var(--ink-2);margin-top:6px">Both statements were sincerely made — though the $40M was a projection, never publicly validated, and both beats landed inside a CEO-driven PR narrative. The deeper point stands: reported value was a function of <b style="color:var(--ink)">what they chose to measure</b>.</p>
+            </div>
+            <div class="plate tight">
+              <p class="klabel">Your evaluation function IS your product decision</p>
+              <p style="font-family:var(--mono);font-size:11px;line-height:1.85;color:var(--ink-2);margin-top:5px">score = w₁·resolution + w₂·CSAT + w₃·cost + w₄·escalation<br>w₁..w₄ are set by humans, in code.<br>Pick them deliberately — or your agent optimizes whatever you forgot to include.</p>
+            </div>
+            <div class="plate tight" style="background:var(--bg-raise-2)">
+              <p class="klabel" style="color:var(--teal)">Day-one move</p>
+              <p style="font-size:12.5px;line-height:1.55;color:var(--ink-2);margin-top:4px">Before launch, write down the metric set that would convince YOU to pull the plug — then wire those exact metrics into dashboards before traffic does.</p>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </article>
+
+  <!-- ========== 05 ORCHESTRATION DEBATE (static) ========== -->
+  <article class="slide" id="s5" data-sec="02 · ORCHESTRATION">
+    <div class="notes"><b>The sharpest public disagreement in agentic engineering, staged side by side.</b><br><b>Anthropic (Jun 2025):</b> orchestrator-worker beat single-agent Opus by 90.2% on their research eval; parallel tool calls cut research time up to 90%; works because subtasks are READ-ONLY, findings return compressed.<br><b>Cognition (Jun 2025, Walden Yan):</b> "Don't Build Multi-Agents" — share full context; actions carry implicit decisions; parallel writers make conflicting decisions that compound. Claude Code sub-agents work because read-only; otherwise single-threaded + compaction.<br><b>Shared ground:</b> token usage explained 80% of performance variance; multi-agent ≈ 15× chat tokens; LangChain's deep-agents = pragmatic middle; everyone says start simple.<br><b>Land the decision rule:</b> fan out only for read-only or independently verifiable breadth; write paths stay single-threaded with full context.<br><b>Time:</b> 5 min. Sources: anthropic.com/engineering multi-agent post; cognition.com/blog/dont-build-multi-agents; blog.langchain.com/deep-agents.</div>
+    <div class="slide-inner">
+      <header class="slide-head" style="margin-bottom:12px">
+        <p class="eyebrow">02 · Orchestration</p>
+        <h2 class="display" style="font-size:38px">The multi-agent question — argued live in public</h2>
+      </header>
+      <div class="body-area" style="gap:10px">
+        <div class="cols" style="flex:1;gap:14px">
+          <div class="plate col" style="gap:8px;border-top:3px solid var(--green)">
+            <div><span class="chip green">EVIDENCE FOR</span>&nbsp;&nbsp;<span style="font-family:var(--mono);font-size:11px;color:var(--ink-3)">ANTHROPIC · JUN 2025</span></div>
+            <p style="font-weight:700;font-size:17px;line-height:1.3">“Parallel multi-agent beat our single agent”</p>
+            <ul style="list-style:none;font-size:12.5px;line-height:1.6;color:var(--ink-2)">
+              <li>· Lead orchestrator + subagents scored <b style="color:var(--ink)">90.2% higher</b> than single-agent Opus on Anthropic's own internal research eval (self-reported; methodology unpublished)</li>
+              <li>· Parallel tool calls cut research time <b style="color:var(--ink)">up to 90%</b></li>
+              <li>· It works because subtasks are <b style="color:var(--ink)">read-only</b> — gather evidence, return compressed findings, no conflicting writes</li>
+            </ul>
+            <p style="font-family:var(--mono);font-size:10px;color:var(--ink-3);margin-top:auto">anthropic.com/engineering · self-reported eval — and note: they sell the tokens multi-agent consumes</p>
+          </div>
+          <div class="plate col" style="gap:8px;border-top:3px solid var(--red);background:var(--bg-raise-2)">
+            <div><span class="chip red">EVIDENCE AGAINST</span>&nbsp;&nbsp;<span style="font-family:var(--mono);font-size:11px;color:var(--ink-3)">COGNITION · JUN 2025</span></div>
+            <p style="font-weight:700;font-size:17px;line-height:1.3">“Don’t build multi-agents”</p>
+            <ul style="list-style:none;font-size:12.5px;line-height:1.6;color:var(--ink-2)">
+              <li>· Two principles: <b style="color:var(--ink)">share full context</b>; <b style="color:var(--ink)">actions carry implicit decisions</b></li>
+              <li>· Parallel agents make conflicting decisions that compound into bad results</li>
+              <li>· Claude Code’s sub-agents only work because they’re read-only — otherwise: single-threaded linear agent + compaction</li>
+            </ul>
+            <p style="font-family:var(--mono);font-size:10px;color:var(--ink-3);margin-top:auto">cognition.com/blog · “Don’t Build Multi-Agents” (Walden Yan)</p>
+          </div>
+        </div>
+        <div class="plate tight" style="display:flex;gap:18px;justify-content:center;padding:10px 16px">
+          <div style="text-align:center"><p style="font-family:var(--mono);font-size:22px;color:var(--green);font-weight:600">90.2%</p><p class="klabel">multi-agent gain<br>(Anthropic eval)</p></div>
+          <div style="width:1px;background:var(--line-strong)"></div>
+          <div style="text-align:center"><p style="font-family:var(--mono);font-size:22px;color:var(--yellow);font-weight:600">~15×</p><p class="klabel">tokens vs chat<br>(price of breadth)</p></div>
+          <div style="width:1px;background:var(--line-strong)"></div>
+          <div style="text-align:center"><p style="font-family:var(--mono);font-size:22px;color:var(--red);font-weight:600">80%</p><p class="klabel">of perf variance<br>= token usage alone</p></div>
+          <div style="width:1px;background:var(--line-strong)"></div>
+          <div style="text-align:center;max-width:280px"><p style="font-size:11.5px;color:var(--ink-2);line-height:1.5;margin-top:4px"><b style="color:var(--teal)">Shared ground:</b> start simple · earn complexity · LangChain’s deep-agents (planner + subagents + filesystem) is the pragmatic middle</p></div>
+        </div>
+        <div class="plate tight" style="border-color:rgba(240,166,60,.45);padding:10px 16px">
+          <p style="font-size:13.5px;color:var(--ink-2)"><span style="color:var(--amber);font-weight:700">DECISION RULE&nbsp;&nbsp;</span>Fan out only for <b style="color:var(--ink)">read-only or independently verifiable breadth</b>. Keep every write path <b style="color:var(--ink)">single-threaded with full context</b>. Subagents return compressed findings — never transcripts.</p>
+        </div>
+      </div>
+    </div>
+  </article>
+
+  <!-- ========== 06 TOPOLOGIES (static quad) ========== -->
+  <article class="slide" id="s6" data-sec="02 · ORCHESTRATION">
+    <div class="notes"><b>Four delegation patterns, matched to task shape.</b> Walk the quad clockwise, then the right-hand ledger: every pattern has a named production failure mode and a designed-in counter.<br>Tie back to the debate: supervisor/blackboard are safe at scale precisely when workers are READ-ONLY (Anthropic's finding, Cognition's caveat).<br><b>Delegation contract to land:</b> every delegation carries a deadline + token budget; workers return structured summaries; mutating steps never fan out; someone always owns the final answer.<br><b>Ask:</b> "Which failure mode have you already lived?"<br><b>Time:</b> 5 min.</div>
+    <div class="slide-inner">
+      <header class="slide-head" style="margin-bottom:12px">
+        <p class="eyebrow">02 · Orchestration</p>
+        <h2 class="display" style="font-size:38px">Delegation patterns — matched to task shape</h2>
+      </header>
+      <div class="body-area">
+        <div class="cols" style="gap:14px">
+          <div class="plate" style="flex:1.15;padding:10px;background:var(--bg);display:flex;align-items:center;justify-content:center">
+            <canvas id="topoQuad" width="720" height="430" style="width:100%;height:auto"></canvas>
+          </div>
+          <div class="col" style="flex:1;gap:8px">
+            <div class="plate tight" style="padding:9px 14px">
+              <p style="font-size:12.5px;line-height:1.45"><b>SUPERVISOR</b> · dynamic decomposition<br><span style="color:var(--ink-3)">Fails: bottleneck, context bloat, one bad plan misdirects the fleet.</span> <span style="color:var(--teal)">Fix: hard turn/token budgets · compressed returns.</span></p>
+            </div>
+            <div class="plate tight" style="padding:9px 14px">
+              <p style="font-size:12.5px;line-height:1.45"><b>PIPELINE</b> · known DAG — most production value lives here<br><span style="color:var(--ink-3)">Fails: drift poisons downstream stages; retries replay the chain.</span> <span style="color:var(--teal)">Fix: typed contracts · retry-from-checkpoint · dead-letter queue.</span></p>
+            </div>
+            <div class="plate tight" style="padding:9px 14px">
+              <p style="font-size:12.5px;line-height:1.45"><b>BLACKBOARD</b> · parallel read-only research<br><span style="color:var(--ink-3)">Fails: write races, duplicated work, no completion signal.</span> <span style="color:var(--teal)">Fix: additive versioned writes · leases · explicit quorum.</span></p>
+            </div>
+            <div class="plate tight" style="padding:9px 14px">
+              <p style="font-size:12.5px;line-height:1.45"><b>DEBATE</b> · verification by contention<br><span style="color:var(--ink-3)">Fails: sycophancy collapse; 3× cost, 2× latency per decision.</span> <span style="color:var(--teal)">Fix: adversarial roles · capped rounds · human escalation.</span></p>
+            </div>
+            <div class="plate tight" style="border-color:rgba(240,166,60,.45);margin-top:auto">
+              <p style="font-size:12px;line-height:1.5;color:var(--ink-2)"><b style="color:var(--amber)">Delegation contract:</b> deadline + token budget on every delegation · structured summaries back · mutating steps never fan out · one owner of the final answer.</p>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </article>
+
+  <!-- ========== 07 CONTEXT ENGINEERING I : CACHE (static) ========== -->
+  <article class="slide" id="s7" data-sec="03 · CONTEXT ENGINEERING">
+    <div class="notes"><b>The cheapest latency win is remembering correctly.</b> Static exhibit modeled on Manus's published economics (Jul 2025): agents run ~100:1 input:output; cached input $0.30/MTok vs uncached $3/MTok; they call cache-hit rate "the single most important metric."<br>Chart shows one 20-turn session, 12k-token stable prefix + ~800 tok/turn tail:<br>· STABLE prefix → ~93% of input tokens billed at the cached rate → ~$0.20/session (≈6× cheaper than no cache)<br>· VOLATILE head (a timestamp or session id up front!) → hits collapse to ~33% → ~$0.86/session<br>Same session, same model — 4× the bill, purely from prompt layout. Cached tokens also serve faster, so this cuts p50 latency too.<br><b>The rules:</b> stable top-of-prompt block; volatile data at the TAIL; append-only history; mask don't remove tools.<br><b>Time:</b> 5 min. Source: manus.im blog "Context Engineering for AI Agents".</div>
+    <div class="slide-inner">
+      <header class="slide-head" style="margin-bottom:12px">
+        <p class="eyebrow">03 · Context Engineering</p>
+        <h2 class="display" style="font-size:38px">The cheapest latency win is remembering correctly</h2>
+        <p class="sub" style="font-size:13.5px">Manus runs ~100 input tokens per output token and calls cache-hit rate “the single most important metric”. Same 20-turn session, two prompt layouts:</p>
+      </header>
+      <div class="body-area">
+        <div class="cols" style="gap:14px">
+          <div class="col" style="flex:1.25;gap:10px">
+            <div class="plate" style="padding:12px 14px;background:var(--bg);display:flex;align-items:center;justify-content:center">
+              <canvas id="kvCanvas" width="620" height="290" style="width:100%;height:auto"></canvas>
+            </div>
+            <div class="cols" style="gap:10px">
+              <div class="plate tight" style="flex:1;text-align:center">
+                <p style="font-family:var(--mono);font-size:20px;color:var(--teal);font-weight:600" id="kvHitA">93%</p>
+                <p class="klabel">hit rate · stable</p>
+              </div>
+              <div class="plate tight" style="flex:1;text-align:center">
+                <p style="font-family:var(--mono);font-size:20px;color:var(--yellow);font-weight:600" id="kvHitB">33%</p>
+                <p class="klabel">hit rate · volatile head</p>
+              </div>
+              <div class="plate tight" style="flex:1;text-align:center">
+                <p style="font-family:var(--mono);font-size:20px;color:var(--amber);font-weight:600" id="kvMult">~6× cheaper</p>
+                <p class="klabel">stable vs no cache</p>
+              </div>
+            </div>
+          </div>
+          <div class="col" style="flex:.85;gap:10px">
+            <div class="plate tight" style="background:var(--bg-raise-2)">
+              <p class="klabel">The rules that protect the cache</p>
+              <ol style="list-style:none;font-family:var(--mono);font-size:11px;line-height:2;color:var(--ink-2);margin-top:4px">
+                <li>①&nbsp; one stable top-of-prompt block: system · tools · docs</li>
+                <li>②&nbsp; volatile data (timestamps! session ids!) at the <span style="color:var(--yellow)">tail</span>, never the head</li>
+                <li>③&nbsp; append-only history — edits invalidate everything after them</li>
+                <li>④&nbsp; mask unavailable tools via logits; removal breaks the prefix</li>
+              </ol>
+            </div>
+            <div class="plate tight" style="border-color:rgba(240,166,60,.45)">
+              <p style="font-size:12.5px;line-height:1.6;color:var(--ink-2)"><b style="color:var(--ink)">Why engineers care:</b> cached tokens bill at <b style="color:var(--teal)">$0.30 vs $3 per MTok</b> — a ~10× price gap — and serve faster, so the same discipline cuts p50 latency. Cache-aware structure is day-one design, not an optimization pass. <span style="color:var(--ink-3)">(Manus, Jul 2025)</span></p>
+            </div>
+            <div class="plate tight">
+              <p class="klabel" style="color:var(--teal)">Day-one move</p>
+              <p style="font-size:12.5px;line-height:1.55;color:var(--ink-2);margin-top:4px">Put cache-hit rate on your dashboard next to error rate. A falling hit rate is the earliest signal of prompt drift — and of money burning quietly.</p>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </article>
+
+  <!-- ========== 08 CONTEXT ENGINEERING II ========== -->
+  <article class="slide" id="s8" data-sec="03 · CONTEXT ENGINEERING">
+    <div class="notes">Second half of context engineering: what happens when the window fills anyway. Four moves, each with provenance:<br>(1) COMPACTION — summarize old turns, regenerate state from artifacts (Manus rebuilds from todo.md; standard in Claude Code).<br>(2) STRUCTURED NOTES — persist findings outside the window (NOTES.md pattern; Anthropic's effective-context-engineering post).<br>(3) RECITATION — rewrite the objective into recent context every few turns; fights lost-in-the-middle; Manus credits it for coherence across ~50-tool-call tasks.<br>(4) SUBAGENT QUARANTINE — fresh-context worker reads the haystack, returns only the answer (LangChain deep agents; Claude Code read-only pattern).<br>Honest framing: practitioner heuristics, not papers — but they're what's shipping in production today.<br><b>Day-one move:</b> context-budget check per turn — tokens-in trending up turn-over-turn is your earliest drift/loop/cost warning.<br><b>Time:</b> 4–5 min.</div>
+    <div class="slide-inner">
+      <header class="slide-head" style="margin-bottom:14px">
+        <p class="eyebrow">03 · Context Engineering</p>
+        <h2 class="display" style="font-size:40px">When the window fills: four field-tested moves</h2>
+        <p class="sub" style="font-size:14px">Long-horizon agents die of context rot long before they die of model limits. Attention is a finite budget — spend it deliberately.</p>
+      </header>
+      <div class="body-area">
+        <div class="cols" style="gap:16px">
+          <div class="plate col" style="gap:8px">
+            <span class="chip amber" style="align-self:flex-start">MOVE 1 · Compact</span>
+            <p style="font-weight:700;font-size:17px">Compress, don't truncate</p>
+            <p class="sub" style="font-size:12.5px;max-width:none">When history grows past budget, summarize old turns and regenerate state from artifacts — naive truncation loses constraints mid-task.</p>
+            <div style="border-top:1px solid var(--line);padding-top:8px;margin-top:auto">
+              <p class="klabel">In practice</p>
+              <p style="font-family:var(--mono);font-size:11px;line-height:1.7;color:var(--ink-3);margin-top:4px">drop oldest turns → keep todo + key facts → rebuild working state from files</p>
+            </div>
+          </div>
+          <div class="plate col" style="gap:8px">
+            <span class="chip teal" style="align-self:flex-start">MOVE 2 · Note-take</span>
+            <p style="font-weight:700;font-size:17px">Memory outside the window</p>
+            <p class="sub" style="font-size:12.5px;max-width:none">Agents persist findings to structured notes (NOTES.md pattern): environment feedback, milestones, failures to avoid — re-readable regardless of conversation length.</p>
+            <div style="border-top:1px solid var(--line);padding-top:8px;margin-top:auto">
+              <p class="klabel">In practice</p>
+              <p style="font-family:var(--mono);font-size:11px;line-height:1.7;color:var(--ink-3);margin-top:4px">write-once-per-milestone · notes survive compaction · failures kept deliberately</p>
+            </div>
+          </div>
+          <div class="plate col" style="gap:8px">
+            <span class="chip green" style="align-self:flex-start">MOVE 3 · Recite</span>
+            <p style="font-weight:700;font-size:17px">Keep the goal on top</p>
+            <p class="sub" style="font-size:12.5px;max-width:none">Re-write the objective (todo.md) into recent context every few turns. Recitation fights lost-in-the-middle: Manus credits it for coherence across ~50-tool-call tasks.</p>
+            <div style="border-top:1px solid var(--line);padding-top:8px;margin-top:auto">
+              <p class="klabel">In practice</p>
+              <p style="font-family:var(--mono);font-size:11px;line-height:1.7;color:var(--ink-3);margin-top:4px">todo.md rewritten after milestones → goal stays near attention peak</p>
+            </div>
+          </div>
+          <div class="plate col" style="gap:8px">
+            <span class="chip red" style="align-self:flex-start">MOVE 4 · Quarantine</span>
+            <p style="font-weight:700;font-size:17px">Subagents as airlocks</p>
+            <p class="sub" style="font-size:12.5px;max-width:none">For haystack searches, spawn a fresh-context subagent that reads everything and returns only the conclusion. Main thread pays for the answer, not the reading.</p>
+            <div style="border-top:1px solid var(--line);padding-top:8px;margin-top:auto">
+              <p class="klabel">In practice</p>
+              <p style="font-family:var(--mono);font-size:11px;line-height:1.7;color:var(--ink-3);margin-top:4px">read-only workers · compressed findings back · main context stays clean</p>
+            </div>
+          </div>
+        </div>
+        <div class="plate tight" style="margin-top:12px;display:flex;align-items:center;gap:14px;border-color:rgba(240,166,60,.45)">
+          <span style="font-family:var(--mono);font-size:20px;color:var(--amber)">⚑</span>
+          <p style="font-size:13.5px;color:var(--ink-2)"><span style="color:var(--ink);font-weight:600">Day-one move:</span> add a context-budget check to your agent loop — tokens-in-per-turn trending up turn-over-turn is your earliest warning of drift, loops, and runaway cost. One number, catches three failure families.</p>
+        </div>
+      </div>
+    </div>
+  </article>
+
+  <!-- ========== 09 RELIABILITY (static r^N chart) ========== -->
+  <article class="slide" id="s9" data-sec="04 · RELIABILITY">
+    <div class="notes"><b>The compounding math, as a static curve with sampled points.</b> P = r<sup>N</sup>: at 95% per step, a 10-step agent succeeds end-to-end only ~60% of the time. Sampled points to call out:<br>· r=0.99, N=10 → 90% · r=0.95, N=10 → 60% · r=0.90, N=10 → 35%<br>· same r=0.95 but N=20 → 36%. Depth hurts as much as per-step quality.<br>Then the engineering: retries (r′=1−(1−r)²), fallbacks, breakers, timeouts buy back the exponent — engineered bar lands ≥97% before human-facing autonomy.<br>Be honest about assumptions: retries assume independent failures (cap + jitter them); fallback needs a safe partial answer; mutating steps need idempotency keys or retry = double-delete (Replit tie-in).<br>Name the 90–97% dead zone explicitly — most teams live there for months; partial autonomy with sampled review is the honest answer.<br><b>Ask:</b> "What's your longest agent chain in prod today? What's its per-step rate?"<br><b>Time:</b> 5 min.</div>
+    <div class="slide-inner">
+      <header class="slide-head" style="margin-bottom:12px">
+        <p class="eyebrow">04 · Reliability</p>
+        <h2 class="display" style="font-size:38px">Reliability compounds — and decays</h2>
+        <p class="sub" style="font-size:13.5px">End-to-end success of an N-step chain at per-step reliability r is simply <span style="font-family:var(--mono)">P = rᴺ</span>. The exponent is what kills pilots.</p>
+      </header>
+      <div class="body-area">
+        <div class="cols" style="gap:14px">
+          <div class="col" style="flex:1.25;gap:10px">
+            <div class="plate" style="padding:12px;background:var(--bg);display:flex;align-items:center;justify-content:center;flex:1">
+              <canvas id="relCanvas" width="640" height="360" style="width:100%;height:auto"></canvas>
+            </div>
+          </div>
+          <div class="col" style="flex:.8;gap:9px">
+            <div style="display:flex;gap:9px">
+              <div class="plate tight" style="flex:1;text-align:center"><p style="font-family:var(--mono);font-size:19px;color:var(--teal);font-weight:600">90%</p><p class="klabel">r=0.99 · N=10</p></div>
+              <div class="plate tight" style="flex:1;text-align:center"><p style="font-family:var(--mono);font-size:19px;color:var(--yellow);font-weight:600">60%</p><p class="klabel">r=0.95 · N=10</p></div>
+              <div class="plate tight" style="flex:1;text-align:center"><p style="font-family:var(--mono);font-size:19px;color:var(--red);font-weight:600">35%</p><p class="klabel">r=0.90 · N=10</p></div>
+            </div>
+            <div class="plate tight" style="background:var(--bg-raise-2)">
+              <p class="klabel">Buy the exponent back</p>
+              <ol style="list-style:none;font-family:var(--mono);font-size:11px;line-height:1.95;color:var(--ink-2);margin-top:4px">
+                <li>①&nbsp; retry w/ backoff+jitter&nbsp;&nbsp;r′ = 1−(1−r)²</li>
+                <li>②&nbsp; fallback / degraded path on hard failure</li>
+                <li>③&nbsp; circuit breaker + timeout everywhere</li>
+                <li>④&nbsp; idempotency keys on anything that mutates</li>
+              </ol>
+            </div>
+            <div class="plate tight" style="border-color:rgba(240,166,60,.45)">
+              <p class="klabel" style="color:var(--amber)">Honest fine print</p>
+              <p style="font-size:12px;line-height:1.55;color:var(--ink-2);margin-top:4px">Retries assume independent failures — cap and jitter them. Fallbacks assume a safe partial answer exists. On mutating steps without idempotency keys, a retry IS a double-delete.</p>
+            </div>
+            <p class="sub" style="font-size:12.5px;margin-top:auto"><span style="color:var(--amber)">Practitioner heuristics — calibrate on your workload, not gospel.</span> <b>The dead zone is where real teams live:</b> ≥97% earns autonomy · ≤90% keeps a reviewer on every run · <span style="color:var(--amber)">90–97%</span> = partial autonomy with sampled review — set the sample rate by blast radius, tighten after every incident.</p>
+          </div>
+        </div>
+      </div>
+    </div>
+  </article>
+
+  <!-- ========== 10 HALLUCINATION LOOPS (static trajectories) ========== -->
+  <article class="slide" id="s10" data-sec="04 · RELIABILITY">
+    <div class="notes"><b>Static exhibit now: four pre-drawn trajectories instead of a live sim.</b> Open by recalling the Replit cover-up from the case-files slide — this loop at incident scale ("it panicked", fabricated 4,000 users).<br>Walk the curves: UNGUARDED drift compounds geometrically and crosses into confabulation by turn 6; GROUNDING (claims must cite retrieved context) flattens immediately; VALIDATION (schema/sanity on tool results) bends it back; REFLECTION catches late drift but costs a second pass.<br>Honest framing: illustrative model trajectories, not benchmark data — the SHAPE is the finding.<br>Production lesson: loops aren't fixed by better prompting alone; they're fixed structurally, with gates that fail closed. Also keep failures IN context deliberately (Manus) so the agent doesn't repeat them.<br><b>Ask:</b> "Where in YOUR pipeline could an error survive three turns unnoticed?"<br><b>Time:</b> 5–6 min.</div>
+    <div class="slide-inner">
+      <header class="slide-head" style="margin-bottom:12px">
+        <p class="eyebrow">04 · Reliability</p>
+        <h2 class="display" style="font-size:38px">Hallucination loops: watching drift happen</h2>
+      </header>
+      <div class="body-area">
+        <div class="cols" style="gap:14px">
+          <div class="col" style="flex:1.3;gap:10px">
+            <div class="plate" style="padding:12px;background:var(--bg);display:flex;align-items:center;justify-content:center;flex:1">
+              <canvas id="loopCanvas" width="700" height="380" style="width:100%;height:auto"></canvas>
+            </div>
+          </div>
+          <div class="col" style="flex:.75;gap:9px">
+            <div class="plate tight" style="padding:10px 14px">
+              <p class="klabel" style="color:var(--teal)">The loop, formally</p>
+              <ol style="list-style:none;font-family:var(--mono);font-size:10.5px;line-height:1.9;color:var(--ink-2);margin-top:3px">
+                <li>①&nbsp; small factual error in output</li>
+                <li>②&nbsp; plan built on the error</li>
+                <li>③&nbsp; tool results read as confirmation</li>
+                <li>④&nbsp; confidence ↑ · divergence compounds</li>
+              </ol>
+            </div>
+            <div class="plate tight">
+              <p class="klabel">Break it structurally</p>
+              <ul style="list-style:none;font-size:12px;line-height:1.7;color:var(--ink-2);margin-top:5px">
+                <li>· <b style="color:var(--green)">Grounding gate</b> — claims must cite context; fails closed</li>
+                <li>· <b style="color:var(--amber)">Validation</b> — schema + sanity checks on tool outputs</li>
+                <li>· <b style="color:var(--red)">Reflection</b> — critic pass; catches late drift, costs latency</li>
+                <li>· Keep failures in context — don't launder them out</li>
+              </ul>
+            </div>
+            <div class="plate tight" style="border-color:rgba(224,106,84,.5);background:var(--bg-raise-2)">
+              <p style="font-size:12px;line-height:1.55;color:var(--ink-2)"><b style="color:var(--ink)">Replit was this loop:</b> failing tests → fabricated users → kept building on the lie. Structural gates would have failed closed at step ①. Prompting alone wouldn't have.</p>
+            </div>
+            <p class="sub" style="font-size:11.5px;color:var(--ink-3);margin-top:auto">Trajectories are illustrative model runs, not benchmark data — the shape is the finding.</p>
+          </div>
+        </div>
+      </div>
+    </div>
+  </article>
+
+  <!-- ========== 11 COST CONTROL ========== -->
+  <article class="slide" id="s11" data-sec="05 · COST & COMPUTE">
+    <div class="notes">Frame with Anthropic's numbers first: multi-agent research used ~15× the tokens of chat; token usage ALONE explained 80% of performance variance across their evals. So tokens are simultaneously your quality dial and your bill — governance decides which one you're turning.<br>Three levers, in ROI order: (1) ROUTE — most traffic doesn't need your biggest model; blended savings of ~60–80% are a widely-repeated practitioner rule-of-thumb, NOT a sourced benchmark — present it as directional, invite skepticism. (2) CACHE & REUSE — KV/prefix caching first (Manus measured ~10× on input price), then semantic response caches. (3) GOVERN — per-principal quotas, per-run budget caps enforced by the orchestrator, batch queues for offline work, runaway-loop kill switches (Replit's emergency off-switch exists BECAUSE of the incident).<br><b>Ask:</b> "Who owns inference cost in your org today?" Silence is the finding.<br><b>Day-one move:</b> every agent feature ships with cost-per-completed-task, reviewed like an SLO.<br><b>Time:</b> 5 min.</div>
+    <div class="slide-inner">
+      <header class="slide-head">
+        <p class="eyebrow">05 · Cost &amp; Compute</p>
+        <h2 class="display">Tokens are your quality dial AND your burn rate</h2>
+      </header>
+      <div class="body-area">
+        <div class="cols" style="gap:18px">
+          <div class="plate col" style="gap:10px">
+            <span class="chip teal" style="align-self:flex-start">Lever 1 · Route</span>
+            <p style="font-weight:700;font-size:19px">Not every token deserves a frontier model</p>
+            <p class="sub" style="font-size:13.5px">A small classifier routes by complexity: extraction and formatting to fast models; planning and synthesis escalate to frontier ones. Practitioners commonly report blended savings of roughly 60–80% at equal task quality — treat it as directional until you measure your own mix — and routing decisions belong in config, not code, so they can be tuned against evals.</p>
+            <div style="border-top:1px solid var(--line);padding-top:10px;margin-top:auto">
+              <p class="klabel">Watch for</p>
+              <p style="font-family:var(--mono);font-size:11.5px;color:var(--ink-3);margin-top:4px">misroute rate · escalation latency · fallback chain depth</p>
+            </div>
+          </div>
+          <div class="plate col" style="gap:10px">
+            <span class="chip amber" style="align-self:flex-start">Lever 2 · Cache &amp; reuse</span>
+            <p style="font-weight:700;font-size:19px">Stop paying twice for the same thought</p>
+            <p class="sub" style="font-size:13.5px">Prefix/KV caching first (it's free discipline — Manus measured ~10× on input price), then semantic response caches for repeated intents, shared retrieval indices. In multi-turn agents you're paying for the same system prompt thousands of times.</p>
+            <div style="border-top:1px solid var(--line);padding-top:10px;margin-top:auto">
+              <p class="klabel">Watch for</p>
+              <p style="font-family:var(--mono);font-size:11.5px;color:var(--ink-3);margin-top:4px">hit rate · staleness window · near-duplicate threshold</p>
+            </div>
+          </div>
+          <div class="plate col" style="gap:10px">
+            <span class="chip green" style="align-self:flex-start">Lever 3 · Govern</span>
+            <p style="font-weight:700;font-size:19px">Inference is a shared, finite resource</p>
+            <p class="sub" style="font-size:13.5px">Per-team quotas, per-run budget caps enforced by the orchestrator, admission control under load, batch windows for offline work. Without governance, one runaway agent loop can consume a fleet budget overnight — the kill switch is load-bearing infrastructure.</p>
+            <div style="border-top:1px solid var(--line);padding-top:10px;margin-top:auto">
+              <p class="klabel">Watch for</p>
+              <p style="font-family:var(--mono);font-size:11.5px;color:var(--ink-3);margin-top:4px">token burn rate · queue fairness · runaway-loop kill switches</p>
+            </div>
+          </div>
+        </div>
+        <div class="plate tight" style="margin-top:16px;display:flex;align-items:center;gap:14px;border-color:rgba(240,166,60,.45)">
+          <span style="font-family:var(--mono);font-size:22px;color:var(--amber)">⚑</span>
+          <p style="font-size:14px;color:var(--ink-2)"><span style="color:var(--ink);font-weight:600">Capacity is a product decision:</span> every agent feature ships with a cost model — expected turns × tokens/turn × $/token × traffic × cache-hit-rate — reviewed like any other SLO. Anthropic's effort-scaling rules (simple tasks: single agent, few calls; complex: many subagents) are exactly this dial, written down.</p>
+        </div>
+      </div>
+    </div>
+  </article>
+
+  <!-- ========== 12 REFERENCE ARCHITECTURE ========== -->
+  <article class="slide" id="s12" data-sec="06 · MLOPS">
+    <div class="notes"><b>The take-home artifact — fully static now.</b><br>Walk the grid as a request journey: gateway → orchestrator → agents/tools → memory/state, with observability wrapping everything and eval gating deploys. Each layer exists because a demo assumption fails in production (say one example per layer, using the left panel's incident map).<br>The left rail gives you the talk track: request journey · incidents-to-layers mapping (Replit/Air Canada/Klarna) · build order.<br>Spend time here; this slide answers "what do I build Monday morning?"<br><b>Time:</b> 5 min.</div>
+    <div class="slide-inner">
+      <header class="slide-head" style="margin-bottom:14px">
+        <p class="eyebrow">06 · Applied MLOps</p>
+        <h2 class="display" style="font-size:40px">The production control plane</h2>
+        <p class="sub" style="font-size:14.5px">Nine layers. Every box earns its place by answering a question your PoC never had to ask.</p>
+      </header>
+      <div class="body-area">
+        <div class="cols">
+          <div class="col" style="flex:0 0 300px;justify-content:center;gap:10px">
+            <div class="plate tight" style="border-color:rgba(240,166,60,.45)">
+              <p class="klabel" style="color:var(--amber)">Read it as a request journey</p>
+              <p style="font-family:var(--mono);font-size:10.5px;line-height:1.9;color:var(--ink-2);margin-top:5px">gateway → orchestrator → agents/tools → memory · observability wraps everything · eval gates deploys</p>
+            </div>
+            <div class="plate tight">
+              <p class="klabel">Incidents → layers</p>
+              <p style="font-family:var(--mono);font-size:10.5px;line-height:1.9;color:var(--ink-2);margin-top:5px"><span style="color:var(--red)">Replit</span> = tool creds + guardrails + restore<br><span style="color:var(--yellow)">Air Canada</span> = guardrails + eval</p>
+            </div>
+            <div class="plate tight" style="background:var(--bg-raise-2)">
+              <p class="klabel" style="color:var(--teal)">Monday morning order</p>
+              <p style="font-family:var(--mono);font-size:10.5px;line-height:1.9;color:var(--ink-2);margin-top:5px">① observability first<br>② tool contracts + idempotency<br>③ eval harness before autonomy<br>④ deploy/rollback last — but before scale</p>
+            </div>
+          </div>
+          <div class="plate" style="flex:1;padding:16px;background:var(--bg)">
+            <div style="display:grid;grid-template-columns:repeat(3,1fr);grid-template-rows:repeat(3,minmax(0,1fr));gap:10px;height:100%" id="archGrid">
+              <div class="arch-cell" data-k="gateway"><span class="ac-num">01</span><span class="ac-name">Gateway &amp; AuthN/Z</span><span class="ac-sub">rate limits · quotas · identity propagation</span></div>
+              <div class="arch-cell" data-k="orchestrator"><span class="ac-num">02</span><span class="ac-name">Orchestrator</span><span class="ac-sub">planning · retries · timeouts · budgets</span></div>
+              <div class="arch-cell" data-k="agents"><span class="ac-num">03</span><span class="ac-name">Agent Fleet</span><span class="ac-sub">specialized workers · sandboxed executors</span></div>
+              <div class="arch-cell" data-k="tools"><span class="ac-num">04</span><span class="ac-name">Tool Layer</span><span class="ac-sub">typed contracts · circuit breakers · idempotency keys</span></div>
+              <div class="arch-cell" data-k="memory"><span class="ac-num">05</span><span class="ac-name">Memory &amp; State</span><span class="ac-sub">vector stores · session state · durable checkpoints</span></div>
+              <div class="arch-cell" data-k="obs"><span class="ac-num">06</span><span class="ac-name">Observability</span><span class="ac-sub">traces per span · token/cost metrics · replay</span></div>
+              <div class="arch-cell" data-k="eval"><span class="ac-num">07</span><span class="ac-name">Eval Harness</span><span class="ac-sub">golden sets · LLM judges · regression gates</span></div>
+              <div class="arch-cell" data-k="deploy"><span class="ac-num">08</span><span class="ac-name">Deploy &amp; Rollback</span><span class="ac-sub">canary traffic % · shadow mode · instant revert</span></div>
+              <div class="arch-cell accent" data-k="guard"><span class="ac-num">09</span><span class="ac-name">Guardrails</span><span class="ac-sub">PII filters · policy engine · human-in-the-loop queue</span></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </article>
+
+  <!-- ========== 13 TESTING STRATEGY ========== -->
+  <article class="slide" id="s13" data-sec="06 · MLOPS">
+    <div class="notes">Key reframe: you cannot unit-test creativity — so test the CONTRACT, not the prose. Deterministic assertions on structure; judge models on quality; humans on taste.<br>The pyramid matters: teams over-invest at the top (vibes) and under-invest at the bottom (deterministic gates).<br>CI integration explicitly: eval suite runs on every PR touching prompts, tools, or models; score drop beyond threshold = blocked merge. That's the whole discipline.<br>Honest caveat on judges: LLM-as-judge correlates well with humans once CALIBRATED against human labels — but judges have known biases (verbosity, self-preference). Calibrate before trusting.<br>Tie-back: the MIT 95% stat is largely an eval-discipline stat — pilots that couldn't demonstrate value were usually pilots that never measured it.<br><b>Time:</b> 4 min.</div>
+    <div class="slide-inner">
+      <header class="slide-head">
+        <p class="eyebrow">06 · Applied MLOps</p>
+        <h2 class="display">Testing what refuses to be deterministic</h2>
+      </header>
+      <div class="body-area">
+        <div class="cols" style="align-items:stretch">
+          <div class="col" style="flex:1.15;gap:10px">
+            <div class="plate" style="display:flex;gap:16px;align-items:center;border-left:3px solid var(--green)">
+              <div style="min-width:74px;text-align:center"><p style="font-family:var(--mono);font-weight:600;color:var(--green);font-size:13px">TIER 1</p><p class="klabel">deterministic</p></div>
+              <div style="flex:1"><p style="font-weight:650">Contract tests</p><p style="font-size:13px;color:var(--ink-2);line-height:1.55">Schema-valid outputs, required fields present, tool args within bounds, no PII leaks. Runs in seconds, blocks every merge.</p></div>
+              <span class="chip green" style="flex:none">CI gate</span>
+            </div>
+            <div class="plate" style="display:flex;gap:16px;align-items:center;border-left:3px solid var(--teal)">
+              <div style="min-width:74px;text-align:center"><p style="font-family:var(--mono);font-weight:600;color:var(--teal);font-size:13px">TIER 2</p><p class="klabel">model-judged</p></div>
+              <div style="flex:1"><p style="font-weight:650">Golden-set scoring</p><p style="font-size:13px;color:var(--ink-2);line-height:1.55">Curated input/output pairs scored by rubric — factuality, groundedness, tone. Judge models correlate with humans once calibrated against human labels.</p></div>
+              <span class="chip teal" style="flex:none">nightly + PR</span>
+            </div>
+            <div class="plate" style="display:flex;gap:16px;align-items:center;border-left:3px solid var(--amber)">
+              <div style="min-width:74px;text-align:center"><p style="font-family:var(--mono);font-weight:600;color:var(--amber);font-size:13px">TIER 3</p><p class="klabel">statistical</p></div>
+              <div style="flex:1"><p style="font-weight:650">Simulation &amp; canaries</p><p style="font-size:13px;color:var(--ink-2);line-height:1.55">Synthetic user journeys against a staging world; then live canary slices with automatic rollback on guardrail breach. Anthropic's rainbow-deploy pattern lives here.</p></div>
+              <span class="chip amber" style="flex:none">pre-prod</span>
+            </div>
+            <div class="plate" style="display:flex;gap:16px;align-items:center;border-left:3px solid var(--red)">
+              <div style="min-width:74px;text-align:center"><p style="font-family:var(--mono);font-weight:600;color:var(--red);font-size:13px">TIER 4</p><p class="klabel">human</p></div>
+              <div style="flex:1"><p style="font-weight:650">Expert review queues</p><p style="font-size:13px;color:var(--ink-2);line-height:1.55">Sampled audits and escalation review. Human feedback flows back into golden sets — the eval suite learns from the queue.</p></div>
+              <span class="chip red" style="flex:none">ongoing</span>
+            </div>
+          </div>
+          <div class="col" style="flex:.85;justify-content:center;gap:14px">
+            <div class="plate">
+              <p class="klabel" style="color:var(--amber)">The rule that changes behavior</p>
+              <p style="font-size:17px;font-weight:650;line-height:1.5;margin-top:8px">If a change isn't covered by an eval,<br>it isn't a change — it's a coin flip.</p>
+              <p class="sub" style="font-size:13.5px;margin-top:10px">Every prompt edit, tool swap, and model upgrade lands with a diff of eval scores attached. No diff, no merge.</p>
+            </div>
+            <div class="plate tight" style="background:var(--bg-raise-2)">
+              <p class="klabel">Anti-pattern to name out loud</p>
+              <p style="font-size:13px;line-height:1.6;color:var(--ink-2);margin-top:6px">“We tried the new model on ten examples and it seemed fine.” Seemed fine is how agents reach production unevaluated — Replit's agent had no eval gate at all. Sample size and score deltas, not vibes.</p>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </article>
+
+  <!-- ========== 14 DEPLOYMENT PIPELINE ========== -->
+  <article class="slide" id="s14" data-sec="06 · MLOPS">
+    <div class="notes">Walk left to right as a promotion path. Two ideas to land:<br>(1) SHADOW MODE — new version runs on real traffic but outputs are discarded; production-shaped evidence without production risk. Anthropic runs parallel deployment versions simultaneously for exactly this reason.<br>(2) AUTOMATED ROLLBACK wired to guardrails, not to a human noticing. Trigger fires on metric breach in minutes, not at next morning's standup.<br>The right column is the checklist to screenshot. Target numbers are starting points, not gospel.<br>Replit tie-in: their post-incident fixes ARE this slide — restore checkpoints = rollback infra; dev/prod separation = environment isolation; emergency off-switch = kill switch.<br><b>Time:</b> 4 min.</div>
+    <div class="slide-inner">
+      <header class="slide-head">
+        <p class="eyebrow">06 · Applied MLOps</p>
+        <h2 class="display">Ship like it's software — because it is</h2>
+      </header>
+      <div class="body-area" style="justify-content:center;gap:26px">
+        <div style="display:flex;align-items:stretch;gap:0">
+          <div style="flex:1;display:flex;align-items:center;gap:0">
+            <div class="stage-card"><p class="st-num">01</p><p class="st-name">Offline evals</p><p class="st-desc">golden set + simulation pass</p><span class="chip green" style="margin-top:10px">gate ≥ baseline</span></div>
+            <div class="stage-arrow">→</div>
+            <div class="stage-card"><p class="st-num">02</p><p class="st-name">Shadow traffic</p><p class="st-desc">mirror real requests, discard output</p><span class="chip teal" style="margin-top:10px">0% user risk</span></div>
+            <div class="stage-arrow">→</div>
+            <div class="stage-card"><p class="st-num">03</p><p class="st-name">Canary 1→5→25%</p><p class="st-desc">ramp while guardrails watch</p><span class="chip amber" style="margin-top:10px">auto-halt</span></div>
+            <div class="stage-arrow">→</div>
+            <div class="stage-card" style="border-color:rgba(139,181,108,.55)"><p class="st-num">04</p><p class="st-name">Full rollout</p><p class="st-desc">SLO dashboard + error budget</p><span class="chip green" style="margin-top:10px">on-call owned</span></div>
+          </div>
+        </div>
+        <div class="cols">
+          <div class="plate tight col" style="gap:8px">
+            <p class="klabel" style="color:var(--red)">Rollback triggers — automated</p>
+            <p style="font-family:var(--mono);font-size:11.5px;line-height:2;color:var(--ink-2)">groundedness score −5% vs baseline<br>tool error rate &gt; 2× baseline<br>p95 latency over SLO for 10 min<br>cost per session &gt; budget × 1.5<br>human-escalation rate spike</p>
+          </div>
+          <div class="plate tight col" style="gap:8px">
+            <p class="klabel" style="color:var(--teal)">What makes rollback cheap</p>
+            <p style="font-family:var(--mono);font-size:11.5px;line-height:2;color:var(--ink-2)">versioned prompts + configs (not code)<br>stateless orchestrator, externalized state<br>replayable traces per decision<br>feature-flagged agent versions<br>"last known good" pinned &amp; warm</p>
+          </div>
+          <div class="plate tight col" style="gap:8px;background:var(--bg-raise-2)">
+            <p class="klabel" style="color:var(--amber)">Target numbers to quote</p>
+            <p style="font-family:var(--mono);font-size:11.5px;line-height:2;color:var(--ink-2)">detect regression:&nbsp;&lt;&nbsp;10 min<br>rollback execution:&nbsp;&lt;&nbsp;2 min<br>shadow soak before canary:&nbsp;≥ 1 week<br>canary floor:&nbsp;≥ 5% for ≥ 24 h</p>
+          </div>
+        </div>
+      </div>
+    </div>
+  </article>
+
+  <!-- ========== 15 HORIZON / FORWARD LOOK ========== -->
+  <article class="slide" id="s15" data-sec="07 · HORIZON">
+    <div class="notes"><b>Why urgency is rational.</b> METR's task-horizon measurement: the length of tasks agents complete autonomously (with 50% success) has doubled roughly every 7 months since 2019 — and the doubling time has ACCELERATED to ~4 months for recent models. Trajectory: seconds-long tasks (2019) → ~50-minute tasks (early 2025 frontier: Claude 3.7 Sonnet, o1) → month-long tasks projected around 2029–30 if the trend holds. Honest caveats: 50% success bar, measured on specific benchmark suites (SWAA/HCAST), extrapolation contested — but no credible reversal signal either.<br>Implication for THIS audience: systems built today must survive agents that attempt longer autonomous chains tomorrow. Every discipline in this talk — context budgets, eval gates, rollback — becomes MORE valuable, not less, as horizons extend.<br><b>Line:</b> "You're not building for the agent that demoed well last month. You're building for the agent that ships two doublings from now."<br><b>Time:</b> 3 min. Source: metr.org "Measuring AI Ability to Complete Long Tasks" (Mar 2025) + Jul 2025 update.</div>
+    <div class="slide-inner">
+      <header class="slide-head" style="margin-bottom:14px">
+        <p class="eyebrow">07 · Horizon</p>
+        <h2 class="display" style="font-size:40px">The task horizon keeps doubling</h2>
+        <p class="sub" style="font-size:14px">METR measures the length of tasks agents complete autonomously (at 50% success). It has doubled every ~7 months since 2019 — recently closer to ~4. Build for the trajectory, not the snapshot.</p>
+      </header>
+      <div class="body-area">
+        <div class="cols">
+          <div class="col" style="flex:1.35">
+            <canvas id="horizonCanvas" width="700" height="380" style="width:100%;height:auto;display:block"></canvas>
+          </div>
+          <div class="col" style="flex:.75;gap:10px;justify-content:center">
+            <div class="plate tight">
+              <p class="klabel">2019</p>
+              <p style="font-family:var(--mono);font-size:16px;color:var(--teal)">seconds-long tasks</p>
+              <p style="font-size:11.5px;color:var(--ink-3);margin-top:2px">GPT-2/3 era completion</p>
+            </div>
+            <div class="plate tight">
+              <p class="klabel">EARLY 2025</p>
+              <p style="font-family:var(--mono);font-size:16px;color:var(--amber)">~50-minute tasks</p>
+              <p style="font-size:11.5px;color:var(--ink-3);margin-top:2px">Claude 3.7 Sonnet · o1 · coding agents</p>
+            </div>
+            <div class="plate tight" style="border-color:rgba(224,106,84,.5)">
+              <p class="klabel">PROJECTION ~2030</p>
+              <p style="font-family:var(--mono);font-size:16px;color:var(--red)">month-long tasks</p>
+              <p style="font-size:11.5px;color:var(--ink-3);margin-top:2px">if the trend holds — contested, but no reversal yet</p>
+            </div>
+            <div class="plate tight" style="background:var(--bg-raise-2)">
+              <p class="klabel" style="color:var(--amber)">So what</p>
+              <p style="font-size:12.5px;line-height:1.55;color:var(--ink-2);margin-top:4px">Every pattern in this talk scales WITH the horizon: context budgets, eval gates, rollback, cost caps. The engineering you build this year is what makes next year's longer-horizon agents shippable.</p>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </article>
+
+  <!-- ========== 16 CHECKLIST ========== -->
+  <article class="slide" id="s16" data-sec="08 · CLOSE">
+    <div class="notes">The compressed talk — read all eight aloud, slowly. Each maps to a section: ① evidence/measurement, ② architecture debate, ③ delegation, ④ context/cache, ⑤ reliability, ⑥ loops/guardrails, ⑦ cost, ⑧ delivery/evals.<br>If short on time: read only the bold verbs + first clauses.<br><b>Time:</b> 3 min.</div>
+    <div class="slide-inner" style="justify-content:center">
+      <p class="eyebrow">Close · The field guide, compressed</p>
+      <h2 class="display" style="font-size:52px;margin-top:14px">Eight things to do before you scale</h2>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px 28px;margin-top:32px;max-width:1020px">
+        <div class="close-item"><span class="cl-n">1</span><p><b>Name two numbers before scaling:</b> end-to-end task success rate and cost per completed task. No numbers, no system — just a demo.</p></div>
+        <div class="close-item"><span class="cl-n">2</span><p><b>Pick orchestration by task shape,</b> not fashion — fan out for read-only breadth; keep write paths single-threaded with full context.</p></div>
+        <div class="close-item"><span class="cl-n">3</span><p><b>Give every delegation a contract:</b> deadline, token budget, structured summary back. Workers compress; only the owner synthesizes.</p></div>
+        <div class="close-item"><span class="cl-n">4</span><p><b>Engineer for cache hits from day one:</b> stable prefix, append-only history, mask-don't-remove tools. It's ~10× on input price and faster p50s.</p></div>
+        <div class="close-item"><span class="cl-n">5</span><p><b>Assume r<sup>N</sup> decay:</b> retries with backoff+jitter, fallbacks, breakers, timeouts everywhere — and idempotency keys on anything that mutates state.</p></div>
+        <div class="close-item"><span class="cl-n">6</span><p><b>Break hallucination loops structurally:</b> grounding gates and validation that fail closed — not vibes-based prompting.</p></div>
+        <div class="close-item"><span class="cl-n">7</span><p><b>Ship behind gates:</b> tiered evals in CI, shadow mode, canary ramps, automated rollback wired to guardrails. Version prompts like code.</p></div>
+        <div class="close-item"><span class="cl-n">8</span><p><b>Own the evaluation function:</b> decide deliberately what your system optimizes — cost, quality, escalation — or it will optimize whatever you forgot to measure.</p></div>
+      </div>
+    </div>
+  </article>
+
+  <!-- ========== 17 SOURCES ========== -->
+  <article class="slide" id="s17" data-sec="CLOSE">
+    <div class="notes">Leave up during Q&amp;A. All primary sources — nothing secondhand except where noted (BBC/CNBC/Fortune reporting Klarna; TechCrunch/InfoQ reporting Replit; Guardian reporting the Air Canada tribunal).<br>If asked about any number: name the source and date. Offer to share this deck + links afterward.</div>
+    <div class="slide-inner">
+      <p class="eyebrow">Appendix · Primary sources</p>
+      <h2 class="display" style="font-size:40px;margin-top:10px">Everything quoted, traceable</h2>
+      <div class="cols" style="margin-top:24px;flex:1;gap:20px">
+        <div class="col" style="gap:6px;font-family:var(--mono);font-size:11px;line-height:1.55;color:var(--ink-2)">
+          <p class="klabel" style="color:var(--teal);margin-bottom:2px">Systems &amp; practice</p>
+          <p>· Anthropic — Building Effective Agents <span style="color:var(--ink-3)">(Dec 2024)</span></p>
+          <p>· Anthropic — How we built our multi-agent research system <span style="color:var(--ink-3)">(Jun 2025)</span></p>
+          <p>· Anthropic — Effective context engineering for AI agents <span style="color:var(--ink-3)">(Sep 2025)</span></p>
+          <p>· Cognition — Don't Build Multi-Agents <span style="color:var(--ink-3)">(Walden Yan, Jun 2025)</span></p>
+          <p>· Manus — Context Engineering for AI Agents <span style="color:var(--ink-3)">(Jul 2025)</span></p>
+          <p>· LangChain — Deep Agents <span style="color:var(--ink-3)">(2025)</span></p>
+          <p>· OpenAI — AgentKit announcement <span style="color:var(--ink-3)">(DevDay Oct 2025)</span></p>
+        </div>
+        <div class="col" style="gap:6px;font-family:var(--mono);font-size:11px;line-height:1.55;color:var(--ink-2)">
+          <p class="klabel" style="color:var(--amber);margin-bottom:2px">Studies &amp; market</p>
+          <p>· METR — Measuring AI Ability to Complete Long Tasks <span style="color:var(--ink-3)">(Mar 2025)</span></p>
+          <p>· METR — Early-2025 experienced-dev RCT <span style="color:var(--ink-3)">(Jul 2025)</span></p>
+          <p>· MIT NANDA — The GenAI Divide: State of AI in Business <span style="color:var(--ink-3)">(Aug 2025)</span></p>
+          <p>· Gartner — agentic AI predictions <span style="color:var(--ink-3)">(Jun 2025)</span></p>
+          <p class="klabel" style="color:var(--red);margin:8px 0 2px">Incidents (press coverage)</p>
+          <p>· Replit × SaaStr database incident <span style="color:var(--ink-3)">(TechCrunch, InfoQ — Jul/Aug 2025)</span></p>
+          <p>· Moffatt v. Air Canada <span style="color:var(--ink-3)">(BC Civil Resolution Tribunal, Feb 2024; reported May 2024)</span></p>
+          <p>· Klarna AI service scale-up &amp; walk-back <span style="color:var(--ink-3)">(BBC Feb 2024; CNBC/Fortune May 2025)</span></p>
+          <p style="margin-top:8px;color:var(--ink-3)">Deck + links shared after the talk · questions welcome</p>
+        </div>
+      </div>
+    </div>
+  </article>
+
+  </section><!-- /deck -->
+
+  <!-- ================= PROGRESS RAIL ================= -->
+  <footer class="rail">
+    <span class="hintbar"><kbd>←</kbd><kbd>→</kbd> NAVIGATE &nbsp;<kbd>O</kbd> INDEX &nbsp;<kbd>N</kbd> NOTES</span>
+    <span class="rail-slot" id="railSlot" style="flex:1;display:flex"></span>
+    <span class="page-no">01 / 17</span>
+  </footer>
+
+</main><!-- /stage -->
+</div><!-- /app -->
+<script>
+/* ============================================================
+   POC→PROD · exhibits part 1 (all static, labeled axes, sampled points)
+   ============================================================ */
+'use strict';
+const TAU=Math.PI*2;
+function getCss(v){return getComputedStyle(document.documentElement).getPropertyValue(v).trim()}
+function $(s){return document.querySelector(s)}
+function $$(s){return [...document.querySelectorAll(s)]}
+
+/* ============================================================
+   EXHIBIT A · CAPABILITY vs OUTCOMES (slide s2)
+   SWE-bench Verified milestones: public leaderboard values.
+   Outcome line: survey midpoints (MIT NANDA / McKinsey), illustrative.
+   ============================================================ */
+(function(){
+const cv=$('#scoreCanvas');if(!cv)return;
+const ctx=cv.getContext('2d');
+/* Capability series: SWE-bench Verified milestones (public leaderboard values).
+   Evidence markers below are individual dated data points, NOT a time series —
+   each is a separate study/forecast with a different denominator and construct. */
+const MODELS=[
+  {t:0,   v:33, lbl:"GPT-4o era"},
+  {t:2.5, v:49, lbl:"3.5 Sonnet"},
+  {t:6,   v:62, lbl:"3.7"},
+  {t:9,   v:72, lbl:"Claude 4"},
+  {t:15,  v:81, lbl:"Opus 4.5"}
+];
+const EVENTS=[ /* [months since Aug 2024, label lines, color] */
+  {t:12, l1:'MIT NANDA · Aug 2025', l2:'~95% of pilots: no', l3:'measured P&L impact', col:'#62b6a5'},
+  {t:10, l1:'Gartner · Jun 2025 (forecast)', l2:'>40% of agentic projects', l3:'canceled by end-2027', col:'#e5c15c'},
+  {t:11, l1:'METR RCT · Jul 2025', l2:'−19% actual speed on', l3:'familiar code (n=16)', col:'#b5ac9b'}
+];
+function drawScore(){
+  const W=cv.width,H=cv.height;
+  ctx.clearRect(0,0,W,H);
+  const padL=46,padR=150,padT=24,padB=88;
+  const SPAN=17;
+  const X=t=>padL+(W-padL-padR)*(t/SPAN);
+  const Y=v=>padT+(H-padT-padB)*(1-v/100);
+  /* grid */
+  ctx.font='10px "IBM Plex Mono",monospace';
+  for(let g=0;g<=4;g++){
+    const yy=Y(g*25);
+    ctx.strokeStyle=g===0?'rgba(237,231,219,.22)':'rgba(237,231,219,.06)';
+    ctx.beginPath();ctx.moveTo(padL,yy);ctx.lineTo(W-padR,yy);ctx.stroke();
+    ctx.fillStyle='#847b6a';ctx.textAlign='right';ctx.fillText(g*25+'%',padL-7,yy+3);
+  }
+  ctx.textAlign='center';
+  [['AUG 24',0],['FEB 25',6],['AUG 25',12],['JAN 26',17]].forEach(([l,t])=>ctx.fillText(l,X(t),H-70));
+  /* axis titles */
+  ctx.fillStyle='#b5ac9b';ctx.font='600 10px "IBM Plex Mono",monospace';
+  ctx.save();ctx.translate(13,(padT+H-padB)/2);ctx.rotate(-Math.PI/2);
+  ctx.textAlign='center';ctx.fillText('SWE-BENCH VERIFIED SCORE (%)',0,0);ctx.restore();
+  ctx.textAlign='center';
+  ctx.fillText('MONTHS SINCE AUG 2024',padL+(W-padL-padR)/2,H-56);
+  /* capability line */
+  ctx.strokeStyle='#f0a63c';ctx.lineWidth=2.4;
+  ctx.beginPath();
+  MODELS.forEach((p,i)=>{i?ctx.lineTo(X(p.t),Y(p.v)):ctx.moveTo(X(p.t),Y(p.v))});
+  ctx.stroke();
+  MODELS.forEach(p=>{
+    ctx.beginPath();ctx.arc(X(p.t),Y(p.v),4,0,TAU);ctx.fillStyle='#f0a63c';ctx.fill();
+    ctx.strokeStyle='#131110';ctx.lineWidth=1.4;ctx.stroke();
+    if(p.t===15){
+      ctx.fillStyle='#ede7db';ctx.font='600 11px "IBM Plex Mono",monospace';
+      ctx.fillText('80.9%',X(p.t)-8,Y(p.v)-11);
+    }else{
+      ctx.fillStyle='#b5ac9b';ctx.font='10px "IBM Plex Mono",monospace';
+      ctx.textAlign='center';ctx.fillText(p.lbl,X(p.t)+4,Y(p.v)-11);
+    }
+  });
+  ctx.fillStyle='#f0a63c';ctx.font='600 11px "IBM Plex Mono",monospace';ctx.textAlign='left';
+  ctx.fillText('+48 pts / 15 mo',X(1.2),Y(60));
+  /* evidence band: three dated point-in-time markers, explicitly NOT a trend */
+  const bandTop=H-padB+18;
+  ctx.strokeStyle='rgba(98,182,165,.35)';ctx.setLineDash([4,4]);
+  ctx.beginPath();ctx.moveTo(padL,bandTop-14);ctx.lineTo(W-padR+120,bandTop-14);ctx.stroke();ctx.setLineDash([]);
+  ctx.fillStyle='#62b6a5';ctx.font='600 9.5px "IBM Plex Mono",monospace';ctx.textAlign='left';
+  ctx.fillText('POINT-IN-TIME EVIDENCE MARKERS · separate studies, different denominators — not comparable to the curve above',padL,bandTop-2);
+  EVENTS.forEach((ev,i)=>{
+    const xx=X(ev.t), yy=bandTop+14+i*17;
+    ctx.beginPath();ctx.arc(xx,yy,3.5,0,TAU);ctx.fillStyle=ev.col;ctx.fill();
+    ctx.strokeStyle='#131110';ctx.lineWidth=1;ctx.stroke();
+    ctx.font='9.5px "IBM Plex Mono",monospace';ctx.textAlign='left';
+    ctx.fillStyle=ev.col;ctx.fillText(ev.l1,xx+10,yy+3);
+    ctx.fillStyle='#847b6a';ctx.fillText(ev.l2+' '+ev.l3,xx+175,yy+3);
+  });
+}
+drawScore();
+})();
+
+/* ============================================================
+   EXHIBIT B · KV-CACHE ECONOMICS (slide s7) — static comparison
+   Model: 20-turn session; 12k-token stable prefix + ~800 tok/turn tail.
+   Prices: $3/MTok uncached vs $0.30/MTok cached (Manus, Jul 2025).
+   Stable layout → ~93% of input tokens cached → ≈$0.20/session.
+   Volatile head (timestamp up front) → hits collapse ~33% → ≈$0.86.
+   ============================================================ */
+(function(){
+const cv=$('#kvCanvas');if(!cv)return;
+const ctx=cv.getContext('2d');
+const PREFIX=12000,TAIL=800,TURNS=20,P_UNC=3,P_C=0.3;
+function session(stable){
+  let tok=0,cachedTok=0;
+  for(let i=0;i<TURNS;i++){
+    const total=PREFIX+i*TAIL+TAIL;
+    const cached=stable?(i>0?PREFIX+i*TAIL:0):(i>0?0.33*(PREFIX+i*TAIL):0);
+    tok+=total;cachedTok+=cached;
+  }
+  const cost=cachedTok*P_C/1e6+(tok-cachedTok)*P_UNC/1e6;
+  return{hit:cachedTok/tok,cost};
+}
+const A=session(true),B=session(false);
+function drawKV(){
+  const W=cv.width,H=cv.height;
+  ctx.clearRect(0,0,W,H);
+  const padL=52,padR=24,padT=48,padB=46;
+  const maxTok=32000;
+  const Y=v=>padT+(H-padT-padB)*(1-v/maxTok);
+  const plotW=W-padL-padR;
+  const slotW=plotW/TURNS;
+  const barW=9;
+
+  /* grid + y axis */
+  ctx.font='10px "IBM Plex Mono",monospace';
+  const yTicks=[0,8000,16000,24000,32000];
+  yTicks.forEach(v=>{
+    const yy=Y(v);
+    ctx.strokeStyle=v===0?'rgba(237,231,219,.22)':'rgba(237,231,219,.07)';
+    ctx.beginPath();ctx.moveTo(padL,yy);ctx.lineTo(W-padR,yy);ctx.stroke();
+    ctx.fillStyle='#847b6a';ctx.textAlign='right';
+    ctx.fillText(v===0?'0':(v/1000)+'k',padL-7,yy+3);
+  });
+
+  /* x ticks */
+  [1,5,10,15,20].forEach(t=>{
+    const xx=padL+slotW*(t-0.5);
+    ctx.fillStyle='#847b6a';ctx.textAlign='center';ctx.fillText(String(t),xx,H-30);
+  });
+
+  /* axis titles */
+  ctx.fillStyle='#b5ac9b';ctx.font='600 10px "IBM Plex Mono",monospace';
+  ctx.textAlign='left';ctx.fillText('INPUT TOKENS BILLED PER TURN (20 TURNS)',padL,16);
+  ctx.textAlign='center';
+  ctx.fillText('SESSION TURN (1 → 20)',padL+plotW/2,H-16);
+  ctx.save();ctx.translate(13,(padT+H-padB)/2);ctx.rotate(-Math.PI/2);
+  ctx.textAlign='center';ctx.fillText('TOKENS',0,0);ctx.restore();
+
+  /* Footnote at bottom */
+  ctx.fillStyle='#847b6a';ctx.font='9px "IBM Plex Mono",monospace';ctx.textAlign='left';
+  ctx.fillText('model: input tokens only · cache-write premium & output excluded · Manus pricing (Jul 2025)',padL,H-4);
+
+  /* Top Legend: Rates & Bar Mapping */
+  ctx.font='10px "IBM Plex Mono",monospace';
+  ctx.fillStyle='#62b6a5';ctx.fillRect(W-padR-215,8,9,9);
+  ctx.fillStyle='#847b6a';ctx.textAlign='left';ctx.fillText('cached ($0.30/M)',W-padR-201,16);
+  ctx.fillStyle='#f0a63c';ctx.fillRect(W-padR-100,8,9,9);
+  ctx.fillStyle='#847b6a';ctx.fillText('uncached ($3/M)',W-padR-86,16);
+
+  /* Subheader showing what left vs right bar in each turn represents */
+  ctx.font='600 9.5px "IBM Plex Mono",monospace';
+  ctx.fillStyle='#62b6a5';
+  ctx.fillText('■ Left bar: Stable prefix (93% cached)',padL,34);
+  ctx.fillStyle='#e06a54';
+  ctx.fillText('■ Right bar: Volatile head (33% cached)',W-padR-225,34);
+
+  /* Draw paired bars for each turn */
+  for(let i=0;i<TURNS;i++){
+    const total=PREFIX+(i+1)*TAIL;
+    const hTot=(H-padT-padB)*(total/maxTok);
+    const cx=padL+i*slotW;
+
+    // Bar 1: Stable Prefix (left bar)
+    const cached1=i>0?PREFIX+i*TAIL:0;
+    const hC1=hTot*(cached1/total);
+    const x1=cx+slotW*0.5-barW-1;
+    if(hC1>0){
+      ctx.fillStyle='#62b6a5';
+      ctx.fillRect(x1,H-padB-hC1,barW,hC1);
+    }
+    ctx.fillStyle='rgba(240,166,60,.9)';
+    ctx.fillRect(x1,H-padB-hTot,barW,hTot-hC1);
+
+    // Bar 2: Volatile Head (right bar)
+    const cached2=i>0?0.33*(PREFIX+i*TAIL):0;
+    const hC2=hTot*(cached2/total);
+    const x2=cx+slotW*0.5+1;
+    if(hC2>0){
+      ctx.fillStyle='#62b6a5';
+      ctx.fillRect(x2,H-padB-hC2,barW,hC2);
+    }
+    ctx.fillStyle='rgba(240,166,60,.9)';
+    ctx.fillRect(x2,H-padB-hTot,barW,hTot-hC2);
+  }
+
+  /* stats readouts */
+  $('#kvHitA').textContent=Math.round(A.hit*100)+'%';
+  $('#kvHitB').textContent=Math.round(B.hit*100)+'%';
+  $('#kvMult').textContent='≈'+(B.cost/A.cost).toFixed(1)+'×';
+}
+drawKV();
+})();
+
+/* ============================================================
+   EXHIBIT C · TOPOLOGY QUAD (slide s6) — static 2×2 mini-diagrams
+   ============================================================ */
+(function(){
+const cv=$('#topoQuad');if(!cv)return;
+const ctx=cv.getContext('2d');
+const LINE='#4a443a',NODE='#1b1815',INK='#ede7db',DIM='#847b6a',AMBER='#f0a63c',TEAL='#62b6a5',RED='#e06a54';
+function box(x,y,label,color){
+  const w=label.length*6.4+22,h=26;
+  ctx.fillStyle=NODE;ctx.strokeStyle=color||LINE;ctx.lineWidth=1;
+  ctx.beginPath();ctx.moveTo(x+w/2,y-h/2);ctx.arcTo(x+w/2,y+h/2,x-w/2,y+h/2,6);
+  ctx.arcTo(x-w/2,y+h/2,x+w/2,y-h/2,6);ctx.arcTo(x-w/2,y-h/2,x+w/2,y-h/2,6);
+  ctx.arcTo(x+w/2,y-h/2,x+w/2,y+h/2,6);ctx.closePath();ctx.fill();ctx.stroke();
+  ctx.fillStyle=INK;ctx.font='600 9.5px "IBM Plex Mono",monospace';ctx.textAlign='center';ctx.textBaseline='middle';
+  ctx.fillText(label,x,y+.5);ctx.textBaseline='alphabetic';
+  return{w,h};
+}
+function arrow(x1,y1,x2,y2,dashed){
+  ctx.save();if(dashed)ctx.setLineDash([4,4]);
+  ctx.strokeStyle=DIM;ctx.lineWidth=1.1;
+  ctx.beginPath();ctx.moveTo(x1,y1);ctx.lineTo(x2,y2);ctx.stroke();
+  const a=Math.atan2(y2-y1,x2-x1);
+  ctx.beginPath();ctx.moveTo(x2,y2);
+  ctx.lineTo(x2-7*Math.cos(a-.4),y2-7*Math.sin(a-.4));
+  ctx.lineTo(x2-7*Math.cos(a+.4),y2-7*Math.sin(a+.4));
+  ctx.closePath();ctx.fillStyle=DIM;ctx.fill();ctx.restore();
+}
+function drawQuad(){
+  const W=cv.width,H=cv.height;
+  ctx.clearRect(0,0,W,H);
+  const cw=W/2,ch=H/2;
+  function panel(i,title){
+    const ox=(i%2)*cw,oy=Math.floor(i/2)*ch;
+    ctx.strokeStyle='rgba(74,68,58,.7)';ctx.lineWidth=1;
+    ctx.strokeRect(ox+8,oy+8,cw-16,ch-16);
+    ctx.fillStyle=AMBER;ctx.font='600 11px "IBM Plex Mono",monospace';ctx.textAlign='left';
+    ctx.fillText(title,ox+20,oy+30);
+  }
+  panel(0,'SUPERVISOR');panel(1,'PIPELINE');panel(2,'BLACKBOARD');panel(3,'DEBATE');
+  ctx.textAlign='left';
+  /* supervisor */
+  {
+    const cx=cw*0.5,cy=ch*0.52;
+    box(cx,cy-38,'SUPERVISOR',AMBER);
+    [['RESEARCHER',cx-95,cy+28],['ANALYST',cx,cy+40],['WRITER',cx+95,cy+28]].forEach(([l,x,y])=>{
+      arrow(cx,cy-24,x,y-14);box(x,y,l);
+    });
+    ctx.fillStyle=DIM;ctx.font='9.5px "IBM Plex Mono"';ctx.textAlign='center';
+    ctx.fillText('plan → delegate → synthesize',cw/2,ch-18);ctx.textAlign='left';
+  }
+  /* pipeline */
+  {
+    const cy=ch*0.52,xs=[cw+cw*0.18,cw+cw*0.39,cw+cw*0.61,cw+cw*0.82];
+    const labels=['EXTRACT','TRANSFORM','VERIFY','ACT'];
+    xs.forEach((x,i)=>{
+      box(x,cy,labels[i]);
+      if(i<3)arrow(x+labels[i].length*3.2+14,cy,xs[i+1]-labels[i+1].length*3.2-14,cy);
+    });
+    ctx.strokeStyle=RED;ctx.lineWidth=1;ctx.setLineDash([3,4]);
+    ctx.beginPath();ctx.moveTo(xs[2],cy+15);ctx.bezierCurveTo(xs[2],cy+42,xs[1],cy+42,xs[1],cy+15);ctx.stroke();
+    ctx.setLineDash([]);ctx.fillStyle=RED;ctx.font='9px "IBM Plex Mono"';ctx.textAlign='center';
+    ctx.fillText('retry from checkpoint',(xs[1]+xs[2])/2,cy+50);ctx.textAlign='left';
+  }
+  /* blackboard */
+  {
+    const bx=cw*0.5,by=ch+ch*0.5;
+    ctx.strokeStyle=AMBER;ctx.globalAlpha=.4;
+    ctx.strokeRect(bx-78,by-26,156,52);ctx.globalAlpha=1;
+    ctx.fillStyle=AMBER;ctx.font='600 9.5px "IBM Plex Mono"';ctx.textAlign='center';
+    ctx.fillText('SHARED STATE (additive)',bx,by+3);
+    [[bx-105,by-48],[bx-70,by-60],[bx+70,by-60],[bx+105,by-48]].forEach(([x,y])=>{
+      arrow(x,y+10,bx,by-27,true);});
+    box(bx-105,by-58,'SRC-A');box(bx+105,by-58,'SRC-C');
+    ctx.fillStyle=DIM;ctx.font='9.5px "IBM Plex Mono"';ctx.textAlign='center';
+    ctx.fillText('read-only workers · versioned writes',cw/2,2*ch-18);ctx.textAlign='left';
+  }
+  /* debate */
+  {
+    const pro={x:cw+cw*0.24,y:ch+ch*0.38},con={x:cw+cw*0.76,y:ch+ch*0.38},jud={x:cw+cw*0.5,y:ch+ch*0.66};
+    arrow(pro.x+34,pro.y,jud.x-38,jud.y-12);arrow(con.x-34,con.y,jud.x+38,jud.y-12);
+    arrow(pro.x+40,pro.y,con.x-40,con.y,true);
+    box(pro.x,pro.y,'ADVOCATE');box(con.x,pro.y,'OPPOSER');box(jud.x,jud.y,'JUDGE',TEAL);
+    ctx.fillStyle=DIM;ctx.font='9.5px "IBM Plex Mono"';ctx.textAlign='center';
+    ctx.fillText('capped rounds · score arguments',cw+cw/2,2*ch-18);ctx.textAlign='left';
+  }
+}
+drawQuad();
+})();
+
+/* ============================================================
+   EXHIBIT D · RELIABILITY CURVE r^N (slide s9) — static, labeled, sampled
+   ============================================================ */
+(function(){
+const cv=$('#relCanvas');if(!cv)return;
+const ctx=cv.getContext('2d');
+const SERIES=[
+  {r:.99,col:'#62b6a5'},
+  {r:.95,col:'#f0a63c'},
+  {r:.90,col:'#e06a54'}
+];
+function drawRel(){
+  const W=cv.width,H=cv.height;
+  ctx.clearRect(0,0,W,H);
+  const padL=56,padR=110,padT=26,padB=42;
+  const X=n=>padL+(W-padL-padR)*((n-2)/18);
+  const Y=p=>padT+(H-padT-padB)*(1-p);
+  /* grid */
+  ctx.font='10px "IBM Plex Mono",monospace';
+  for(let g=0;g<=5;g++){
+    const yy=Y(g/5);
+    ctx.strokeStyle=g===0?'rgba(237,231,219,.22)':'rgba(237,231,219,.07)';
+    ctx.beginPath();ctx.moveTo(padL,yy);ctx.lineTo(W-padR,yy);ctx.stroke();
+    ctx.fillStyle='#847b6a';ctx.textAlign='right';ctx.fillText(g*20+'%',padL-7,yy+3);
+  }
+  for(let n=2;n<=20;n+=3){
+    const xx=X(n);
+    ctx.strokeStyle='rgba(237,231,219,.05)';
+    ctx.beginPath();ctx.moveTo(xx,Y(0));ctx.lineTo(xx,Y(1));ctx.stroke();
+    ctx.fillStyle='#847b6a';ctx.textAlign='center';ctx.fillText(String(n),xx,H-16);
+  }
+  /* axis titles */
+  ctx.fillStyle='#b5ac9b';ctx.font='600 10px "IBM Plex Mono",monospace';ctx.textAlign='center';
+  ctx.fillText('PIPELINE STEPS (N)',padL+(W-padL-padR)/2,H-2);
+  ctx.save();ctx.translate(13,(padT+H-padB)/2);ctx.rotate(-Math.PI/2);
+  ctx.textAlign='center';ctx.fillText('END-TO-END SUCCESS P = rᴺ',0,0);ctx.restore();
+  /* 97% ship bar */
+  ctx.save();ctx.setLineDash([4,4]);ctx.strokeStyle='#8bb56c';ctx.lineWidth=1.2;
+  ctx.beginPath();ctx.moveTo(padL,Y(.97));ctx.lineTo(W-padR,Y(.97));ctx.stroke();ctx.restore();
+  ctx.fillStyle='#8bb56c';ctx.font='600 9.5px "IBM Plex Mono",monospace';ctx.textAlign='left';
+  ctx.fillText('97% SHIP BAR',W-padR-92,Y(.97)-6);
+  /* curves + sampled points */
+  SERIES.forEach(({r,col})=>{
+    ctx.strokeStyle=col;ctx.lineWidth=2.2;
+    ctx.beginPath();
+    for(let n=2;n<=20;n++){
+      const p=Math.pow(r,n);
+      const xx=X(n),yy=Y(p);
+      n===2?ctx.moveTo(xx,yy):ctx.lineTo(xx,yy);
+    }
+    ctx.stroke();
+    [10,15,20].forEach(n=>{
+      const p=Math.pow(r,n),xx=X(n),yy=Y(p);
+      ctx.beginPath();ctx.arc(xx,yy,4,0,TAU);ctx.fillStyle=col;ctx.fill();
+      ctx.strokeStyle='#131110';ctx.lineWidth=1.4;ctx.stroke();
+      if(n===10){
+        ctx.font='600 10.5px "IBM Plex Mono",monospace';
+        ctx.fillStyle=col;ctx.textAlign='right';
+        ctx.fillText((p*100).toFixed(0)+'%',xx-8,yy+3);
+      }
+      if(n===20&&r===.95){
+        ctx.fillStyle=col;ctx.font='600 10px "IBM Plex Mono",monospace';ctx.textAlign='left';
+        ctx.fillText('36%',xx+7,yy-6);
+        ctx.fillStyle='#847b6a';ctx.font='9.5px "IBM Plex Mono"';
+        ctx.fillText('same r, deeper chain',xx+7,yy+7);
+      }
+    });
+    /* series label at right edge */
+    const endP=Math.pow(r,20),ex=X(20)+10;
+    ctx.font='600 11px "IBM Plex Mono",monospace';ctx.textAlign='left';
+    ctx.fillStyle=col;
+    ctx.fillText('r='+r.toFixed(2),ex,Y(Math.min(endP+.02,1))+3);
+  });
+}
+drawRel();
+})();
+
+/* ============================================================
+   EXHIBIT E · HALLUCINATION LOOP TRAJECTORIES (slide s10)
+   Static: four illustrative runs from a 35% seed error.
+   ============================================================ */
+(function(){
+const cv=$('#loopCanvas');if(!cv)return;
+const ctx=cv.getContext('2d');
+
+/* Realistic illustrative trajectories starting at 35% seed error */
+const S={
+  unguarded: [0.35, 0.44, 0.58, 0.76, 0.92, 0.99, 1.00, 1.00, 1.00, 1.00, 1.00, 1.00, 1.00],
+  validation:[0.35, 0.45, 0.57, 0.48, 0.42, 0.54, 0.46, 0.40, 0.51, 0.44, 0.56, 0.48, 0.42],
+  reflection:[0.35, 0.42, 0.52, 0.62, 0.68, 0.64, 0.52, 0.42, 0.34, 0.28, 0.24, 0.22, 0.20],
+  grounding: [0.35, 0.46, 0.54, 0.42, 0.34, 0.27, 0.22, 0.18, 0.15, 0.13, 0.11, 0.09, 0.08]
+};
+
+const RUNS=[
+  {k:'unguarded', col:'#e06a54', lbl:'UNGUARDED (100% runaway)', dash:null},
+  {k:'validation',col:'#f0a63c', lbl:'+ TOOL VALIDATION (~42%)', dash:null},
+  {k:'reflection',col:'#e5c15c', lbl:'+ REFLECTION PASS (drops to 20%)', dash:[6,4]},
+  {k:'grounding', col:'#62b6a5', lbl:'GROUNDING GATE (8% safe zone)', dash:null}
+];
+
+function drawLoop(){
+  const W=cv.width,H=cv.height;
+  ctx.clearRect(0,0,W,H);
+  const padL=56,padR=215,padT=38,padB=44;
+  const X=t=>padL+(W-padL-padR)*(t/12);
+  const Y=v=>padT+(H-padT-padB)*(1-v);
+  const plotW=W-padL-padR;
+
+  /* grid */
+  ctx.font='10px "IBM Plex Mono",monospace';
+  for(let g=0;g<=4;g++){
+    const yy=Y(g/4);
+    ctx.strokeStyle=g===2?'rgba(224,106,84,.3)':'rgba(237,231,219,.07)';
+    if(g===2)ctx.setLineDash([4,4]);
+    ctx.beginPath();ctx.moveTo(padL,yy);ctx.lineTo(padL+plotW,yy);ctx.stroke();ctx.setLineDash([]);
+    ctx.fillStyle='#847b6a';ctx.textAlign='right';
+    ctx.fillText(['100%','75%','50%','25%','0%'][4-g],padL-8,yy+3);
+  }
+  for(let t=0;t<=12;t+=2){
+    ctx.fillStyle='#847b6a';ctx.textAlign='center';
+    ctx.fillText('turn '+t,X(t),H-26);
+  }
+
+  /* axis titles */
+  ctx.fillStyle='#b5ac9b';ctx.font='600 10px "IBM Plex Mono",monospace';ctx.textAlign='left';
+  ctx.fillText('CLAIM DEVIATION vs GROUND TRUTH (seed error: +35%)',padL,18);
+  ctx.textAlign='center';
+  ctx.fillText('AGENT TURNS (0 → 12)',padL+plotW/2,H-10);
+  ctx.save();ctx.translate(13,(padT+H-padB)/2);ctx.rotate(-Math.PI/2);
+  ctx.textAlign='center';ctx.fillText('DEVIATION RATE',0,0);ctx.restore();
+
+  /* safe zone */
+  ctx.fillStyle='rgba(139,181,108,.08)';
+  ctx.fillRect(padL,Y(.25),plotW,(H-padB)-Y(.25));
+  ctx.strokeStyle='rgba(139,181,108,.3)';ctx.lineWidth=1;
+  ctx.beginPath();ctx.moveTo(padL,Y(.25));ctx.lineTo(padL+plotW,Y(.25));ctx.stroke();
+  ctx.fillStyle='#8bb56c';ctx.font='600 9.5px "IBM Plex Mono",monospace';ctx.textAlign='left';
+  ctx.fillText('USABLE OUTPUT ZONE (<25% error)',padL+10,Y(.25)-6);
+
+  /* 50% threshold note */
+  ctx.fillStyle='rgba(224,106,84,.7)';ctx.font='9px "IBM Plex Mono",monospace';ctx.textAlign='right';
+  ctx.fillText('50% DRIFT THRESHOLD',padL+plotW-8,Y(.50)-5);
+
+  /* curves + endpoint dots + right-hand labels */
+  RUNS.forEach(({k,col,dash,lbl})=>{
+    const s=S[k];
+    ctx.save();
+    ctx.lineWidth=2.4;ctx.strokeStyle=col;
+    if(dash){ctx.setLineDash(dash)}
+    ctx.beginPath();
+    s.forEach((v,t)=>{t?ctx.lineTo(X(t),Y(v)):ctx.moveTo(X(t),Y(v))});
+    ctx.stroke();ctx.restore();
+
+    // Endpoint dot
+    const lastT=s.length-1;
+    const lastY=Y(s[lastT]);
+    ctx.beginPath();ctx.arc(X(lastT),lastY,4,0,Math.PI*2);
+    ctx.fillStyle=col;ctx.fill();
+    ctx.strokeStyle='#131110';ctx.lineWidth=1.4;ctx.stroke();
+
+    // End label on the right margin with matching color
+    ctx.font='600 9.5px "IBM Plex Mono",monospace';ctx.textAlign='left';
+    ctx.fillStyle=col;
+    ctx.fillText(lbl,X(lastT)+10,lastY+3.5);
+  });
+
+  /* Replit incident callout on the unguarded curve at Turn 6 */
+  const ru=S.unguarded;
+  const rx=X(6), ry=Y(ru[6]);
+  ctx.beginPath();ctx.arc(rx,ry,5,0,Math.PI*2);
+  ctx.fillStyle='#e06a54';ctx.fill();
+  ctx.strokeStyle='#131110';ctx.lineWidth=1.5;ctx.stroke();
+
+  // Callout badge positioned cleanly below the point
+  ctx.font='600 9px "IBM Plex Mono",monospace';ctx.textAlign='left';
+  const calloutText='▲ Turn 6: Replit "panic" (fabricates data to hide failure)';
+  const tw=ctx.measureText(calloutText).width+16;
+  const bx=rx-140, by=ry+18;
+  ctx.fillStyle='rgba(27,24,21,.92)';
+  ctx.strokeStyle='rgba(224,106,84,.75)';
+  ctx.lineWidth=1;
+  ctx.fillRect(bx,by,tw,20);
+  ctx.strokeRect(bx,by,tw,20);
+  ctx.fillStyle='#e06a54';
+  ctx.fillText(calloutText,bx+8,by+13);
+}
+drawLoop();
+})();
+
+/* ============================================================
+   EXHIBIT F · TASK-HORIZON CHART (slide s15)
+   METR: 50%-success task length vs time, log scale.
+   Doubling ~every 7 months historically; ~4 months post-2023.
+   ============================================================ */
+(function(){
+const cv=$('#horizonCanvas');if(!cv)return;
+const ctx=cv.getContext('2d');
+/* METR "Measuring AI Ability to Complete Long Tasks" (Mar 2025) + Jul 2025 update.
+   x = calendar year (fractional). Points = 50%-success task length for frontier models. */
+const PTS=[
+  {x:2019.0, m:0.3,   lbl:'GPT-2/3 era'},
+  {x:2022.9, m:2,     lbl:'GPT-3.5'},
+  {x:2023.2, m:8,     lbl:'GPT-4'},
+  {x:2024.7, m:30,    lbl:'o1 / Claude 3.5–3.7'},
+  {x:2025.1, m:60,    lbl:'early-2025 frontier'}
+];
+const XMIN=2019,XMAX=2030.5;
+function drawHorizon(){
+  const W=cv.width,H=cv.height;
+  ctx.clearRect(0,0,W,H);
+  const padL=58,padR=24,padT=30,padB=44;
+  const X=x=>padL+(W-padL-padR)*((x-XMIN)/(XMAX-XMIN));
+  const Y=m=>{
+    const lg=Math.log10(Math.max(m,.05));
+    const lo=Math.log10(.05),hi=Math.log10(20000);
+    return padT+(H-padT-padB)*(1-(lg-lo)/(hi-lo));
+  };
+  ctx.font='10px "IBM Plex Mono",monospace';
+  [[.05,'~3s'],[1,'1 min'],[10,'10 min'],[60,'~1 h'],[480,'8 h'],[1440,'1 day'],[10080,'1 wk'],[43200,'~1 mo']].forEach(([v,l])=>{
+    const yy=Y(v);
+    if(v>=.05&&v<=20000){
+      ctx.strokeStyle='rgba(237,231,219,.07)';
+      ctx.beginPath();ctx.moveTo(padL,yy);ctx.lineTo(W-padR,yy);ctx.stroke();
+      ctx.fillStyle='#847b6a';ctx.textAlign='right';ctx.fillText(l,padL-7,yy+3);
+    }
+  });
+  for(let yr=2019;yr<=2030;yr+=1){
+    const xx=X(yr);
+    ctx.strokeStyle=(yr%2===1)?'rgba(237,231,219,.08)':'rgba(237,231,219,.04)';
+    ctx.beginPath();ctx.moveTo(xx,Y(0.05));ctx.lineTo(xx,Y(40000));ctx.stroke();
+    if(yr%2===1){ctx.fillStyle='#847b6a';ctx.textAlign='center';ctx.fillText(String(yr),xx,H-18)}
+  }
+  /* axis titles */
+  ctx.fillStyle='#b5ac9b';ctx.font='600 10px "IBM Plex Mono",monospace';ctx.textAlign='left';
+  ctx.fillText('TASK LENGTH COMPLETED AT 50% SUCCESS (log scale)',padL,16);
+  ctx.save();ctx.translate(13,(padT+H-padB)/2);ctx.rotate(-Math.PI/2);
+  ctx.textAlign='center';ctx.fillText('HUMAN-TIME EQUIVALENT',0,0);ctx.restore();
+  /* projection zone: starts where the accelerated segment starts */
+  ctx.fillStyle='rgba(224,106,84,.06)';
+  ctx.fillRect(X(2025.1),padT,X(XMAX)-X(2025.1),(H-padT-padB));
+  ctx.fillStyle='#e06a54';ctx.font='600 10px "IBM Plex Mono",monospace';ctx.textAlign='left';
+  ctx.fillText('EXTRAPOLATION →',X(2025.3),padT+14);
+  /* measured trend: piecewise doubling fit through the actual points.
+     Segment 1: 0.3 min @2019 → 60 min @2025.1 ≈ ×2 every ~7 months.
+     Segment 2 (accelerating): from the last measured point onward, ~4-month doubling — dashed. */
+  ctx.save();ctx.setLineDash([5,5]);
+  ctx.strokeStyle='#f0a63c';ctx.lineWidth=2;
+  ctx.beginPath();
+  PTS.forEach((p,i)=>{i?ctx.lineTo(X(p.x),Y(p.m)):ctx.moveTo(X(p.x),Y(p.m))});
+  ctx.stroke();
+  ctx.restore();
+  /* accelerated extrapolation from last point */
+  ctx.save();ctx.setLineDash([2,4]);ctx.lineWidth=2;ctx.globalAlpha=.75;
+  const mAcc=x=>60*Math.pow(2,(x-2025.1)*12/4);
+  ctx.strokeStyle='#f0a63c';
+  ctx.beginPath();ctx.moveTo(X(2025.1),Y(60));ctx.lineTo(X(XMAX),Y(Math.min(mAcc(XMAX),40000)));
+  ctx.stroke();ctx.restore();
+  /* measured points on top */
+  PTS.forEach(p=>{
+    ctx.beginPath();ctx.arc(X(p.x),Y(p.m),4,0,TAU);
+    ctx.fillStyle='#ede7db';ctx.fill();
+    ctx.strokeStyle='#131110';ctx.lineWidth=1.4;ctx.stroke();
+    ctx.fillStyle='#b5ac9b';ctx.font='10px "IBM Plex Mono",monospace';ctx.textAlign='center';
+    ctx.fillText(p.lbl,X(p.x),Y(p.m)-11);
+  });
+  /* sampled annotations */
+  ctx.fillStyle='#62b6a5';ctx.font='600 11px "IBM Plex Mono",monospace';ctx.textAlign='left';
+  ctx.fillText('measured: ×2 every ~7 mo',X(2019.3),Y(1)+22);
+  ctx.globalAlpha=.85;
+  ctx.fillText('recent: ×2 every ~4 mo',X(2025.3),Y(300)+16);
+  ctx.globalAlpha=1;
+  ctx.fillStyle='#847b6a';ctx.font='10px "IBM Plex Mono",monospace';
+  ctx.fillText('points: individual frontier models · source: METR Mar 2025 + Jul 2025 update',padL,H-4);
+}
+drawHorizon();
+})();
+</script>
+
+/* ============================================================
+   EXHIBIT G · TASK-HORIZON CHART (slide s15)
+   METR: 50%-success task length vs time, log scale.
+   Doubling ~every 7 months historically; ~4 months post-2023.
+   ============================================================ */
+
+
+/* ============================================================
+   EXHIBIT H · REFERENCE ARCHITECTURE (slide s12)
+   ============================================================ */
+</script>
+<script>
+/* ============================================================
+   POC→PROD · deck engine
+   ============================================================ */
+'use strict';
+let cur=0,animating=false;
+const slides=$$('.slide');
+
+/* build progress rail */
+const railTrack=document.createElement('div');railTrack.className='rail-track';
+document.getElementById('railSlot').appendChild(railTrack);
+const cells=[];
+slides.forEach((s,i)=>{
+  const c=document.createElement('div');c.className='rail-cell';
+  c.title='Slide '+(i+1);c.addEventListener('click',()=>go(i));
+  railTrack.appendChild(c);cells.push(c);
+});
+function renderRail(){
+  cells.forEach((c,i)=>{c.classList.toggle('cur',i===cur);c.classList.toggle('done',i<cur)});
+}
+function updateHud(){
+  $('#secChip').textContent=slides[cur].dataset.sec;
+  $('.page-no').textContent=String(cur+1).padStart(2,'0')+' / '+String(slides.length).padStart(2,'0');
+  renderRail();
+}
+function showNotes(){
+  const n=slides[cur].querySelector('.notes');
+  $('#notesBox').innerHTML=n?n.innerHTML:'';
+}
+function go(n,fwd){
+  n=Math.max(0,Math.min(slides.length-1,n));
+  if(animating||n===cur)return;
+  fwd=(fwd===undefined)?(n>cur):fwd;
+  animating=true;
+  const from=slides[cur],to=slides[n];
+  from.classList.remove('active','enter-fwd','enter-back');
+  from.classList.add('leaving',fwd?'exit-fwd':'exit-back');
+  to.classList.remove('leaving','exit-fwd','exit-back');
+  to.classList.add('active',fwd?'enter-fwd':'enter-back');
+  cur=n;updateHud();showNotes();
+  setTimeout(()=>{from.classList.remove('leaving','exit-fwd','exit-back');animating=false;},380);
+  try{history.replaceState(null,'','#'+to.id)}catch(e){/* file:// or restricted context */}
+}
+
+function toggleNotes(){document.body.classList.toggle('notes-open')}
+let ovl=null;
+function toggleOverview(){
+  if(ovl){ovl.remove();ovl=null;return}
+  ovl=document.createElement('div');ovl.className='ovl';ovl.id='ovl';
+  const h=document.createElement('h3');h.textContent='DECK INDEX — CLICK TO JUMP';ovl.appendChild(h);
+  const g=document.createElement('div');g.className='ovl-grid';
+  slides.forEach((s,i)=>{
+    const t=document.createElement('button');
+    t.className='ovl-tile'+(i===cur?' cur':'');
+    const num=document.createElement('span');num.className='ovl-num';num.textContent='SLIDE '+String(i+1).padStart(2,'0');
+    const title=document.createElement('span');title.className='ovl-title';
+    title.textContent=(s.querySelector('h1.display,h2.display')||{textContent:s.id}).textContent.trim();
+    const sec=document.createElement('span');sec.className='ovl-sec';sec.textContent=s.dataset.sec;
+    t.append(num,title,sec);
+    t.addEventListener('click',()=>{toggleOverview();go(i,i>cur)});
+    g.appendChild(t);
+  });
+  ovl.appendChild(g);
+  ovl.addEventListener('click',e=>{if(e.target===ovl)toggleOverview()});
+  $('#stage').appendChild(ovl);
+}
+function toggleFull(){
+  if(document.fullscreenElement){document.exitFullscreen()}
+  else{document.documentElement.requestFullscreen().catch(()=>{})}
+}
+
+/* keyboard */
+document.addEventListener('keydown',e=>{
+  if(e.target.matches('input,textarea'))return;
+  if(e.key==='ArrowRight'||e.key==='PageDown'||e.key===' '||e.key==='Enter'){e.preventDefault();go(cur+1,true)}
+  else if(e.key==='ArrowLeft'||e.key==='PageUp'){e.preventDefault();go(cur-1,false)}
+  else if(e.key==='Home'){e.preventDefault();go(0,false)}
+  else if(e.key==='End'){e.preventDefault();go(slides.length-1,true)}
+  else if(e.key==='o'||e.key==='O'){toggleOverview()}
+  else if(e.key==='n'||e.key==='N'){toggleNotes()}
+  else if(e.key==='f'||e.key==='F'){toggleFull()}
+  else if(e.key==='Escape'){if(ovl)toggleOverview()}
+});
+
+$('#btnNotes').addEventListener('click',toggleNotes);
+$('#btnOverview').addEventListener('click',toggleOverview);
+$('#btnFull').addEventListener('click',toggleFull);
+
+/* live hash changes */
+window.addEventListener('hashchange',()=>{
+  const id=location.hash.replace('#','');
+  const n=slides.findIndex(s=>s.id===id);
+  if(n>=0&&n!==cur)go(n,n>cur);
+});
+
+/* talk clock */
+let clockRun=false,clockSecs=0,clockInt=null;
+function fmtClock(s){return String(Math.floor(s/60)).padStart(2,'0')+':'+String(s%60).padStart(2,'0')}
+$('#btnClock').addEventListener('click',()=>{
+  clockRun=!clockRun;
+  $('#clock').classList.toggle('paused',!clockRun);
+  if(clockRun){clockInt=setInterval(()=>{clockSecs++;$('#clock').textContent=fmtClock(clockSecs)},1000)}
+  else clearInterval(clockInt);
+});
+
+/* stage scaling */
+function fitStage(){
+  const s=Math.min(window.innerWidth/1280,window.innerHeight/720);
+  $('#stage').style.transform='scale('+s+')';
+}
+window.addEventListener('resize',fitStage);fitStage();
+
+/* deep link + init */
+const hashId=location.hash.replace('#','');
+const startIdx=Math.max(0,slides.findIndex(s=>s.id===hashId));
+cur=startIdx;
+slides.forEach((s,i)=>{s.classList.toggle('active',i===startIdx)});
+updateHud();showNotes();
+</script>
+<script>
+/* ============================================================
+   TAIL · arch-cell styles + reveals + boot
+   ============================================================ */
+(function(){
+  'use strict';
+
+  /* ---- arch-cell styles (injected once) ---- */
+  const css=document.createElement('style');
+  css.textContent=[
+    '.arch-cell{position:relative;text-align:left;border:1px solid var(--line);border-radius:10px;',
+    'background:var(--bg-raise);padding:14px 16px;display:flex;flex-direction:column;gap:3px;',
+    'transition:border-color .15s,opacity .15s,background .15s;cursor:pointer}',
+    '.arch-cell:hover,.arch-cell:focus-visible,.arch-cell.iso{border-color:var(--amber);background:var(--amber-fade)}',
+    '#archGrid:has(.iso) .arch-cell:not(.iso){opacity:.38}',
+    '.arch-cell .ac-num{font-family:var(--mono);font-size:9.5px;letter-spacing:.18em;color:var(--amber-dim)}',
+    '.arch-cell .ac-name{font-weight:700;font-size:15.5px;color:var(--ink)}',
+    '.arch-cell .ac-sub{font-family:var(--mono);font-size:10.5px;line-height:1.5;color:var(--ink-3);margin-top:auto}',
+    '.arch-cell.accent{border-color:rgba(224,106,84,.55)}',
+    '.claim-row{cursor:pointer;border-left:3px solid var(--line-strong);transition:border-color .15s,background .15s}',
+    '.claim-row:hover{border-color:var(--ink-2);background:var(--bg-raise-2)}',
+    '.claim-row.active[data-side="pro"]{border-left-color:var(--green);background:rgba(139,181,108,.08)}',
+    '.claim-row.active[data-side="anti"]{border-left-color:var(--red);background:rgba(224,106,84,.07)}',
+    '.claim-row.active[data-side="neutral"]{border-left-color:var(--teal);background:rgba(98,182,165,.07)}',
+    '.claim-row.active .cl-txt{color:var(--ink)}',
+    '.will-reveal{opacity:0;transform:translateY(14px);transition:opacity .5s ease,transform .5s cubic-bezier(.22,.8,.3,1)}',
+    '.revealed{opacity:1;transform:none}',
+    '@media (prefers-reduced-motion: reduce){',
+    ' .slide,.slide *{animation:none!important;transition:none!important}',
+    ' .will-reveal{opacity:1;transform:none}}'
+  ].join('');
+  document.head.appendChild(css);
+
+  /* ---- reveal on slide activation ---- */
+  const mo=new MutationObserver(()=>{
+    document.querySelectorAll('.slide.active .will-reveal:not(.revealed)').forEach(el=>{
+      el.style.transitionDelay=(Math.min([...el.parentElement.querySelectorAll('.will-reveal')].indexOf(el),6)*60)+'ms';
+      el.classList.add('revealed');
+    });
+  });
+  document.querySelectorAll('.slide').forEach(s=>{
+    mo.observe(s,{attributes:true,attributeFilter:['class']});
+  });
+  /* reveal anything visible at boot */
+  document.querySelectorAll('.slide.active .will-reveal').forEach(el=>el.classList.add('revealed'));
+
+})();
+</script>
+</body>
+</html>
