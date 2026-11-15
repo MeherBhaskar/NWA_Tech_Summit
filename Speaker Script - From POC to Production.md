@@ -11,9 +11,7 @@ Companion to the deck `From POC to Production - Conf42.html` (17 slides).
 
 **Script:**
 
-Hello everyone — thanks for making time for this. 
-
-Here's my promise for the next forty minutes. This is an **engineering talk**, not a market talk. I'm not selling anything, there's no vendor pitch, and every number I put up has a source you can check — the last slide is nothing but citations. We're going to walk through why agentic AI has been demo-ready since 2023 but *production-ready* is still something you have to engineer — through orchestration choices, context handling, reliability math, cost control, and delivery discipline.
+Hello everyone — thanks for making time for this. We're going to walk through why agentic AI has been demo-ready since 2023 but *production-ready* is still something you have to engineer — through orchestration choices, context handling, reliability math, cost control, and delivery discipline.
 
 By the end, you'll have eight concrete things to do when you get back to your desk Monday morning. Let's go.
 
