@@ -1,44 +1,41 @@
-# From POC to Production — Annotated Speaker Script
-**NWA Tech Summit · 2026 · Slides interleaved with spoken script**
+# From POC to Production — Speaker Script
+
+**Conf42 · 2026 · ~40 minutes + Q&A**  
+Companion to the deck `From POC to Production - Conf42.html` (17 slides).
 
 ---
 
-## Slide 1 — Title: "From POC to Production"
+## Slide 1 — Title: "From POC to Production" (~2 min)
 
 **On screen:** Title card with topic chips (multi-agent orchestration, context engineering, reliability & loops, cost control, eval-driven delivery).
 
 **Script:**
 
-Hello everyone — thanks for making time for this. Quick show of hands before we start: how many of you have seen an AI agent demo that was genuinely impressive? Keep your hand up if that same system is handling real production traffic today.
+Hello everyone — thanks for making time for this. 
 
-*(pause — let hands drop)*
-
-Yeah. That gap between those two moments is what we're here to talk about.
-
-Here's my promise for the next forty-five minutes. This is an **engineering talk**, not a market talk. I'm not selling anything, there's no vendor pitch, and every number I put up has a source you can check — the last slide is nothing but citations. We're going to walk through why agentic AI has been demo-ready since 2023 but *production-ready* is still something you have to engineer — through orchestration choices, context handling, reliability math, cost control, and delivery discipline.
+Here's my promise for the next forty minutes. This is an **engineering talk**, not a market talk. I'm not selling anything, there's no vendor pitch, and every number I put up has a source you can check — the last slide is nothing but citations. We're going to walk through why agentic AI has been demo-ready since 2023 but *production-ready* is still something you have to engineer — through orchestration choices, context handling, reliability math, cost control, and delivery discipline.
 
 By the end, you'll have eight concrete things to do when you get back to your desk Monday morning. Let's go.
 
 ---
 
-## Slide 2 — "The models got better. The outcomes didn't follow."
+## Slide 2 — "The models got better. The outcomes didn't follow." (~3–4 min)
 
-**On screen:** SWE-bench Verified curve climbing from ~33% (Aug 2024) to 85.2% (Aug 2026), plus four stat cards.
+**On screen:** SWE-bench Verified curve climbing from ~33% (Aug 2024) to 80.9% (Jan 2026), plus three stat cards.
 
 **Script:**
 
 Let's start with the tension that motivates this whole talk.
 
-Look at this curve. This is SWE-bench Verified — real GitHub issues, resolved end-to-end by models. In August 2024, the best systems scored around thirty-three percent. By August 2026, we crossed **eighty-five percent**. That is not a small improvement; that's capability crossing bar after internal bar, year over year. The models got better. Genuinely, dramatically better.
+Look at this curve. This is SWE-bench Verified — real GitHub issues, resolved end-to-end by models. In August 2024, the best systems scored around thirty-three percent. By January 2026, we crossed **eighty percent**. That is not a small improvement; that's capability crossing bar after internal bar, year over year. The models got better. Genuinely, dramatically better.
 
 Now look at what happened to outcomes:
 
-- MIT's NANDA group found that roughly **94% of enterprise GenAI pilots showed no measurable P&L impact** — despite tens of billions invested.
-- Gartner predicts **42% of agentic-AI projects will be canceled** by end of 2027.
+- MIT's NANDA group found that roughly **95% of enterprise GenAI pilots showed no measurable P&L impact** — despite $30–40 billion invested.
+- Gartner predicts **more than 40% of agentic-AI projects will be canceled** by end of 2027.
 - And my favorite uncomfortable one: METR ran a randomized controlled trial with experienced open-source maintainers. With AI assistance they **self-reported being about 20% faster** — but were measured **19% slower**. They felt faster while actually being slower.
-- But — and this is important — the same study found **37% gains for non-experts on unfamiliar work**. The boundary condition matters.
 
-I want to be fair to these numbers. The METR study is one population, and people have contested its generalization. MIT's methodology has been challenged too. Steelman them however you like — even discounting heavily, the pattern holds: **capability went up, pilot outcomes stalled**.
+I want to be fair to these numbers. The METR study is n=16, one population, and people have contested its generalization. MIT's methodology has been challenged too. Steelman them however you like — even discounting heavily, the pattern holds: **capability went up, pilot outcomes stalled**.
 
 Why? Not because the models can't do the work. Because of four things the demo never had to survive: **context handling, reliability, cost, and delivery discipline**. Everything after this slide is about those four.
 
@@ -46,7 +43,7 @@ And here's your first day-one move, before any of the fancy stuff: **instrument 
 
 ---
 
-## Slide 3 — "Two incidents every builder should know by heart"
+## Slide 3 — "Two incidents every builder should know by heart" (~4–5 min)
 
 **On screen:** Two case cards — Replit × SaaStr (red), Air Canada tribunal (yellow), plus Monday-morning actions.
 
@@ -58,7 +55,7 @@ Theory is cheap. Let me give you two stories — one engineering failure, one le
 
 I'll be honest about scoping: this is the weakest-case proxy — one user, extreme circumstances. But the shape of it matters enormously. Watch the loop: failing tests → fabrication → building on the lie. Hold onto that; we come back to it later.
 
-**Case two: Air Canada, February 2024.** A passenger asked Air Canada's website chatbot about bereavement fares. The chatbot confidently described a policy — which **did not exist**. The passenger booked on that advice, then the airline refused the refund. Air Canada's defense in front of the British Columbia Civil Resolution Tribunal was, I'm not joking, that the chatbot was **"a separate legal entity"** responsible for its own statements. The tribunal rejected that and awarded CA$650.88.
+**Case two: Air Canada, May 2024.** A passenger asked Air Canada's website chatbot about bereavement fares. The chatbot confidently described a policy — which **did not exist**. The passenger booked on that advice, then the airline refused the refund. Air Canada's defense in front of the British Columbia Civil Resolution Tribunal was, I'm not joking, that the chatbot was **"a separate legal entity"** responsible for its own statements. The tribunal rejected that and awarded CA$650.88.
 
 The takeaway from both: **courts and regulators treat agent output as company speech.** Your agent's hallucination is your liability.
 
@@ -66,7 +63,7 @@ Neither of these failures was a model-capability problem. Both were engineering 
 
 ---
 
-## Slide 4 — "Klarna, fifteen months apart"
+## Slide 4 — "Klarna, fifteen months apart" (~3–4 min)
 
 **On screen:** Two-column comparison — Feb 2024 scale-up vs May 2025 walk-back.
 
@@ -86,7 +83,7 @@ Day-one move: **before launch, define the metrics that would justify pulling the
 
 ---
 
-## Slide 5 — "The multi-agent question — argued live in public"
+## Slide 5 — "The multi-agent question — argued live in public" (~5 min)
 
 **On screen:** Evidence FOR vs Evidence AGAINST panels, stat strip, decision rule.
 
@@ -112,11 +109,11 @@ If you remember one slide from the orchestration section, make it this rule.
 
 ---
 
-## Slide 6 — "Delegation patterns — matched to task shape"
+## Slide 6 — "Delegation patterns — matched to task shape" (~5 min)
 
-**On screen:** Quad diagram — Supervisor, Pipeline, Blackboard, Debate — each with failure mode and fix. Mermaid diagram below.
+**On screen:** Quad diagram — Supervisor, Pipeline, Blackboard, Debate — each with failure mode and fix.
 
-**[EXHIBIT]** — Pause on the mermaid diagram. Let it render.
+**[EXHIBIT]** — Pause on the diagram. Let it render.
 
 **Script:**
 
@@ -132,11 +129,9 @@ If you do delegate work to multiple agents, there are basically four shapes. Let
 
 Underneath all four sits what I call the **delegation contract**. Every delegation gets: a deadline, a token budget, structured summaries back. Mutating steps never fan out. And there's always a single named owner of the final answer.
 
-**[AUDIENCE]** Quick question for the room — anyone here run multi-agent stuff in production? What broke first? *(take 1–2 answers)*
-
 ---
 
-## Slide 7 — "The cheapest latency win is remembering correctly"
+## Slide 7 — "The cheapest latency win is remembering correctly" (~5 min)
 
 **On screen:** KV-cache chart — same 20-turn session, stable vs volatile prompt layouts, 93% vs 33% hit rates.
 
@@ -164,7 +159,7 @@ Day-one move: put **cache-hit rate on the dashboard next to error rate**. When i
 
 ---
 
-## Slide 8 — "When the window fills: four field-tested moves"
+## Slide 8 — "When the window fills: four field-tested moves" (~4–5 min)
 
 **On screen:** Four move cards — Compact, Note-take, Recite, Quarantine — with provenance.
 
@@ -188,9 +183,9 @@ Banner move: add a **context-budget check per turn** — tokens-in-per-turn tren
 
 ---
 
-## Slide 9 — "Reliability compounds — and decays"
+## Slide 9 — "Reliability compounds — and decays" (~5 min)
 
-**On screen:** Reliability curves — P = rᴺ at N=10, 20, 50 for r = 0.99 / 0.97 / 0.95 / 0.90.
+**On screen:** Reliability curves — P = rᴺ at N=10 for r = 0.99 / 0.95 / 0.90.
 
 **[EXHIBIT]** — Let the table land. It's the most important table in the talk.
 
@@ -202,17 +197,10 @@ For an N-step chain at per-step reliability r, end-to-end success is **P = rᴺ*
 
 At ten steps:
 - r = 0.99 → 90%
-- r = 0.97 → 74%
 - r = 0.95 → 60%
 - r = 0.90 → 35%
 
-At fifty steps — which is where we're heading:
-- 0.99 → 61%
-- 0.97 → 22%
-- 0.95 → 8%
-- 0.90 → 0.5%
-
-Read that again. A 95%-reliable step — which sounds good! — gives you a coin flip-plus at ten steps, and **8% at fifty**. **Depth hurts as much as per-step quality.** This is why demos die in production: demos are shallow chains; production is deep ones.
+Read that again. A 95%-reliable step — which sounds good! — gives you a coin flip-plus at ten steps. **Depth hurts as much as per-step quality.** This is why demos die in production: demos are shallow chains; production is deep ones.
 
 But here's the good news — the exponent is not destiny. You buy it back:
 
@@ -227,11 +215,11 @@ Where should you aim? My guidance: **≥97% earns autonomy. ≤90%, keep a human
 
 ---
 
-## Slide 10 — "Hallucination loops: watching drift happen"
+## Slide 10 — "Hallucination loops: watching drift happen" (~5–6 min)
 
-**On screen:** Four drift trajectories — unguarded, grounding, validation, reflection. Mermaid diagram of the loop.
+**On screen:** Four drift trajectories — unguarded, grounding, validation, reflection.
 
-**[EXHIBIT]** — Pause on the mermaid diagram. Let the loop render.
+**[EXHIBIT]** — Pause on the diagram. Let the loop render.
 
 **Script:**
 
@@ -253,13 +241,13 @@ Callout on screen says it plainly: **"Replit was this loop."** Failing tests →
 
 ---
 
-## Slide 11 — "Tokens are your quality dial AND your burn rate"
+## Slide 11 — "Tokens are your quality dial AND your burn rate" (~5 min)
 
-**On screen:** Three levers — Route, Cache & reuse, Govern — with watch-for metrics. 2026 model economics.
+**On screen:** Three levers — Route, Cache & reuse, Govern — with watch-for metrics.
 
 **Script:**
 
-Last technical section: cost. Frame it with one number: multi-agent research runs use **~15× the tokens of a chat interaction**. Tokens are simultaneously your quality dial and your burn rate. Three levers, in ROI order.
+Last technical section: cost. Frame it with one number: multi-agent research runs used **~15× the tokens of a chat interaction**. Tokens are simultaneously your quality dial and your burn rate. Three levers, in ROI order.
 
 **Lever 1: Route.** Classify incoming requests by complexity and send simple things to cheap models, hard things to expensive ones. Practitioners report roughly **60–80% blended savings at equal quality** — flagging clearly: that's directional folklore, not a benchmark. Measure your own mix. Keep routing decisions in config, not code, so you can tune without deploys. Watch misroute rate.
 
@@ -267,15 +255,11 @@ Last technical section: cost. Frame it with one number: multi-agent research run
 
 **Lever 3: Govern.** Per-team quotas, per-run budget caps enforced by the orchestrator, admission control during peaks, batch windows for async work. And the kill switch — I described it earlier as a safety feature, but treat it as **load-bearing infrastructure**. When something goes wrong at scale, you need a button that stops spend in seconds, not a config change reviewed tomorrow. Watch token burn rate.
 
-2026 model economics: Claude 4 Haiku at $0.25/$1.25 per MTok, GPT-4o-mini at $0.15/$0.60. Blended routing targets **under two cents per task** for typical coding agents at scale.
-
 Banner: capacity is a product decision. Your ship-cost model is **turns × tokens × price × traffic × cache-hit-rate** — review it like an SLO, not a spreadsheet you open after the invoice scares you.
-
-**[AUDIENCE]** Who owns inference cost at your shop today — engineering, product, finance? *(pause)* If the answer is "nobody," that's the finding.
 
 ---
 
-## Slide 12 — "The production control plane"
+## Slide 12 — "The production control plane" (~5 min)
 
 **On screen:** Nine-layer architecture grid — Gateway → Orchestrator → Agent Fleet → Tools → Memory → Observability → Evals → Deploy → Guardrails.
 
@@ -305,7 +289,7 @@ Screenshot this one. It's the take-home artifact.
 
 ---
 
-## Slide 13 — "Testing what refuses to be deterministic"
+## Slide 13 — "Testing what refuses to be deterministic" (~4 min)
 
 **On screen:** Four-tier eval pyramid — deterministic, model-judged, statistical, human.
 
@@ -313,7 +297,7 @@ Screenshot this one. It's the take-home artifact.
 
 "How do you test something nondeterministic?" — the most common question I get. Answer: in tiers, matching test type to what can be checked mechanically.
 
-**Tier 1 — deterministic contract tests.** Is the output schema-valid? Required fields present? Args bounded? No PII leaked? Pure code, runs in seconds, blocks merges. Most teams skip this because it feels basic. It's your highest-ROI tier.
+**Tier 1 — deterministic contract tests.** Is the output schema-valid? Required fields present? Args bounded? No PII leaked? Pure code, runs in CI, blocks merges. Most teams skip this because it feels basic. It's your highest-ROI tier.
 
 **Tier 2 — model-judged.** Golden-set scoring by rubric. Judges correlate with humans *once calibrated against human labels* — calibrate first, trust after.
 
@@ -327,7 +311,7 @@ Anti-pattern to kill: testing on ten examples and calling it fine. Talk sample s
 
 ---
 
-## Slide 14 — "Ship like it's software — because it is"
+## Slide 14 — "Ship like it's software — because it is" (~4 min)
 
 **On screen:** Promotion path — offline evals → shadow → canary → full rollout, with automated rollback triggers.
 
@@ -358,9 +342,9 @@ Notice the Replit fixes map directly onto this slide — dev/prod isolation is g
 
 ---
 
-## Slide 15 — "The task horizon keeps doubling"
+## Slide 15 — "The task horizon keeps doubling" (~3 min)
 
-**On screen:** Horizon chart — autonomous task length doubling every ~4-7 months since 2019.
+**On screen:** Horizon chart — autonomous task length doubling every ~7 months since 2019.
 
 **[EXHIBIT]** — Let the horizon bars render. This is the "why urgency" slide.
 
@@ -368,7 +352,7 @@ Notice the Replit fixes map directly onto this slide — dev/prod isolation is g
 
 Why urgency? Because this entire architecture is about to get stress-tested harder.
 
-METR's finding: the length of tasks agents complete autonomously — at 50% success — has been **doubling roughly every seven months since 2019, recently closer to four months.** Milestones: 2019, seconds-long tasks. Early 2025, roughly fifty-minute tasks. Early 2026, four-hour tasks. If the trend holds — contested, but no reversal yet — week-long autonomous tasks around 2028, month-long somewhere around 2030.
+METR's finding: the length of tasks agents complete autonomously — at 50% success — has been **doubling roughly every seven months since 2019, recently closer to four months.** Milestones: 2019, seconds-long tasks. Early 2025, roughly fifty-minute tasks. If the trend holds — contested, but no reversal yet — month-long autonomous tasks somewhere around 2030.
 
 Caveats apply: the 50% success bar is generous, benchmark suites skew toward coding. Treat it as directional.
 
@@ -376,7 +360,7 @@ But the so-what stands: **every pattern in this talk scales with the horizon.** 
 
 ---
 
-## Slide 16 — "Eight things to do before you scale"
+## Slide 16 — "Eight things to do before you scale" (~3 min)
 
 **On screen:** Numbered checklist 1–8.
 
@@ -397,59 +381,9 @@ Number 8 is the deepest one. Klarna didn't fail at AI — they optimized exactly
 
 ---
 
-## Slide 17 — "ADR templates for your team"
+## Slide 17 — "Everything quoted, traceable" (~1 min + Q&A)
 
-**On screen:** Six Architecture Decision Records — Orchestration Pattern, Model Routing, Context Budget, Reliability Targets, Eval Gates, Cost Governance.
-
-**Script:**
-
-These are the conversations your team should have *before* you write the code. Each ADR forces the discussion that prevents the incident.
-
-Orchestration Pattern Selection — don't default to Supervisor. Model Routing Policy — config-driven, not hardcoded. Context Budget Policy — compaction at 70%, NOTES.md, recitation every 5 turns. Reliability Targets — the autonomy zones. Eval Gate Configuration — 200 golden cases minimum, judge calibrated to kappa ≥ 0.8. Cost Governance — kill switch under 30 seconds, monthly review with product.
-
-Copy these into your repo. The best architecture is the one you've agreed on and written down.
-
----
-
-## Slide 18 — "The production stack — what's actually shipping"
-
-**On screen:** Tooling landscape table — 8 categories, market leaders, key differentiators.
-
-**Script:**
-
-This landscape moves fast. Evaluate against your ADRs, not vendor marketing. The best stack is the one your team can operate at 2am.
-
-Key callouts: LangGraph for orchestration (checkpointing + streaming + HITL native), Braintrust or Langfuse for evals (code-first vs open-source), LiteLLM or Portkey for routing (100+ providers, semantic caching), Qdrant or pgvector for memory (filtering vs zero-new-infra), Guardrails AI or NeMo for guardrails (rail spec vs programmable).
-
----
-
-## Slide 19 — "What's new since the last version of this talk"
-
-**On screen:** Six emerging patterns — Reasoning Models as Orchestrators, Semantic Deduplication, Speculative Execution, Eval-Driven Prompt Optimization, Constitution-Based Guardrails, Streaming-First UX.
-
-**Script:**
-
-Six things that weren't in the 2025 version of this talk:
-
-**Reasoning models as orchestrators** — o3, Claude 4 Opus, DeepSeek-R1 used as planners, not chat. They emit structured plans, not prose. 40% fewer planning errors vs prompted Sonnet/GPT-4o.
-
-**Semantic deduplication at ingest** — embedding-based near-dup detection before LLM call. 30–50% token reduction on repetitive workloads.
-
-**Speculative execution** — run cheap model in parallel with expensive; accept cheap result if confidence > threshold. Cuts p50 latency 2–3× for high-volume paths.
-
-**Eval-driven prompt optimization** — DSPy, TextGrad, OPRO automatically optimize prompts against golden sets. 10–20% quality lift without human prompt engineering.
-
-**Constitution-based guardrails** — Anthropic Constitutional AI pattern: model critiques own output against written principles. Catches 60%+ of policy violations pre-deployment.
-
-**Streaming-first UX** — token-by-token streaming with partial tool results shown progressively. Perceived latency down 60% even when actual latency unchanged.
-
-These aren't theoretical — they're shipping in production *now*.
-
----
-
-## Slide 20 — "Everything quoted, traceable"
-
-**On screen:** Source list, grouped by category.
+**On screen:** Source list, grouped.
 
 **Script:**
 
